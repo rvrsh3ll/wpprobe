@@ -30,7 +30,7 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-const maxResponseSize = 1048576
+const maxResponseSize = 10485760
 
 type HTTPClientManager struct {
 	client *resty.Client
