@@ -21,11 +21,11 @@ package scanner
 
 import (
 	"fmt"
-	"log"
-	"sync"
-
 	"github.com/Chocapikk/wpprobe/internal/utils"
 	"github.com/Chocapikk/wpprobe/internal/wordfence"
+	"log"
+	"strings"
+	"sync"
 )
 
 func ScanTargets(url string, file string, noCheckVersion bool, threads int, output string) {
@@ -105,7 +105,7 @@ func ScanSite(target string, noCheckVersion bool, csvWriter *utils.CSVWriter, is
 		return
 	}
 
-	detectedPlugins := DetectPlugins(endpoints, pluginEndpoints)
+	pluginMatches, pluginConfidence, pluginAmbiguity, detectedPlugins := DetectPlugins(endpoints, pluginEndpoints)
 	if len(detectedPlugins) == 0 {
 		if !isFileMode {
 			fmt.Printf("\n❌ No plugins detected on %s\n", target)
@@ -115,28 +115,37 @@ func ScanSite(target string, noCheckVersion bool, csvWriter *utils.CSVWriter, is
 
 	results := make(map[string]string)
 	resultsCSV := make(map[string]map[string]map[string][]string)
+	pluginVulns := make(map[string]VulnCategories)
 
 	for _, plugin := range detectedPlugins {
 		version := "unknown"
 		if !noCheckVersion {
 			version = utils.GetPluginVersion(target, plugin)
 		}
-
 		results[plugin] = version
 
 		vulns := wordfence.GetVulnerabilitiesForPlugin(plugin, version)
+		vulnCategories := VulnCategories{}
 		vulnMap := make(map[string][]string)
+
 		for _, v := range vulns {
 			vulnMap[v.Severity] = append(vulnMap[v.Severity], v.CVE)
+			switch strings.ToLower(v.Severity) {
+			case "critical":
+				vulnCategories.Critical = append(vulnCategories.Critical, v.CVE)
+			case "high":
+				vulnCategories.High = append(vulnCategories.High, v.CVE)
+			case "medium":
+				vulnCategories.Medium = append(vulnCategories.Medium, v.CVE)
+			case "low":
+				vulnCategories.Low = append(vulnCategories.Low, v.CVE)
+			}
 		}
-
-		if _, exists := resultsCSV[plugin]; !exists {
-			resultsCSV[plugin] = make(map[string]map[string][]string)
-		}
-		resultsCSV[plugin][version] = vulnMap
+		resultsCSV[plugin] = map[string]map[string][]string{version: vulnMap}
+		pluginVulns[plugin] = vulnCategories
 	}
 
-	DisplayResults(target, results)
+	DisplayResults(target, results, pluginMatches, pluginConfidence, pluginAmbiguity, pluginVulns)
 
 	if csvWriter != nil {
 		csvWriter.WriteResults(target, resultsCSV)

@@ -24,7 +24,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Chocapikk/wpprobe/internal/wordfence"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
 )
@@ -49,34 +48,14 @@ type VulnCategories struct {
 	Low      []string
 }
 
-func DisplayResults(target string, detectedPlugins map[string]string) {
+func DisplayResults(target string, detectedPlugins map[string]string, pluginMatches map[string]int, pluginConfidence map[string]float64, pluginAmbiguity map[string]bool, pluginVulns map[string]VulnCategories) {
+
 	vulnSummary := map[string]int{"Critical": 0, "High": 0, "Medium": 0, "Low": 0}
-
-	pluginVulns := make(map[string]VulnCategories)
-
-	for plugin, version := range detectedPlugins {
-		vulns := wordfence.GetVulnerabilitiesForPlugin(plugin, version)
-		vulnCategories := VulnCategories{}
-
-		for _, vuln := range vulns {
-			switch strings.ToLower(vuln.Severity) {
-			case "critical":
-				vulnCategories.Critical = append(vulnCategories.Critical, vuln.CVE)
-			case "high":
-				vulnCategories.High = append(vulnCategories.High, vuln.CVE)
-			case "medium":
-				vulnCategories.Medium = append(vulnCategories.Medium, vuln.CVE)
-			case "low":
-				vulnCategories.Low = append(vulnCategories.Low, vuln.CVE)
-			}
-		}
-
+	for _, vulnCategories := range pluginVulns {
 		vulnSummary["Critical"] += len(vulnCategories.Critical)
 		vulnSummary["High"] += len(vulnCategories.High)
 		vulnSummary["Medium"] += len(vulnCategories.Medium)
 		vulnSummary["Low"] += len(vulnCategories.Low)
-
-		pluginVulns[plugin] = vulnCategories
 	}
 
 	fmt.Println(titleStyle.Render("\n🔎 ") +
@@ -91,30 +70,21 @@ func DisplayResults(target string, detectedPlugins map[string]string) {
 
 	root := tree.New()
 
-	pluginKeys := make([]string, 0, len(detectedPlugins))
-	for plugin := range detectedPlugins {
-		pluginKeys = append(pluginKeys, plugin)
-	}
-	sort.Strings(pluginKeys)
-
-	for _, plugin := range pluginKeys {
+	for _, plugin := range sortedPluginsByConfidence(detectedPlugins, pluginConfidence) {
 		version := detectedPlugins[plugin]
 		vulnCategories := pluginVulns[plugin]
+		confidence := pluginConfidence[plugin]
 
-		pluginColor := noVulnStyle
-		if version == "" {
-			pluginColor = noVersionStyle
-		} else if len(vulnCategories.Critical) > 0 {
-			pluginColor = criticalStyle
-		} else if len(vulnCategories.High) > 0 {
-			pluginColor = highStyle
-		} else if len(vulnCategories.Medium) > 0 {
-			pluginColor = mediumStyle
-		} else if len(vulnCategories.Low) > 0 {
-			pluginColor = lowStyle
+		pluginColor := getPluginColor(version, vulnCategories)
+
+		pluginLabel := fmt.Sprintf("%s (%s)", plugin, version)
+		if pluginAmbiguity[plugin] {
+			pluginLabel = fmt.Sprintf("%s (%s) ⚠️ Ambiguity detected!", plugin, version)
+		} else if version == "unknown" {
+			pluginLabel = fmt.Sprintf("%s (%s) [%.2f%% confidence]", plugin, version, confidence)
 		}
 
-		pluginNode := tree.Root(pluginColor.Render(fmt.Sprintf("%s (%s)", plugin, version)))
+		pluginNode := tree.Root(pluginColor.Render(pluginLabel))
 
 		addVulnNode(pluginNode, "Critical", vulnCategories.Critical, criticalStyle)
 		addVulnNode(pluginNode, "High", vulnCategories.High, highStyle)
@@ -126,6 +96,32 @@ func DisplayResults(target string, detectedPlugins map[string]string) {
 
 	fmt.Println(root.String())
 	fmt.Println(separator)
+}
+
+func sortedPluginsByConfidence(detectedPlugins map[string]string, pluginConfidence map[string]float64) []string {
+	sortedPlugins := make([]string, 0, len(detectedPlugins))
+	for plugin := range detectedPlugins {
+		sortedPlugins = append(sortedPlugins, plugin)
+	}
+	sort.Slice(sortedPlugins, func(i, j int) bool {
+		return pluginConfidence[sortedPlugins[i]] > pluginConfidence[sortedPlugins[j]]
+	})
+	return sortedPlugins
+}
+
+func getPluginColor(version string, vulnCategories VulnCategories) lipgloss.Style {
+	if version == "unknown" {
+		return noVersionStyle
+	} else if len(vulnCategories.Critical) > 0 {
+		return criticalStyle
+	} else if len(vulnCategories.High) > 0 {
+		return highStyle
+	} else if len(vulnCategories.Medium) > 0 {
+		return mediumStyle
+	} else if len(vulnCategories.Low) > 0 {
+		return lowStyle
+	}
+	return noVulnStyle
 }
 
 func addVulnNode(parent *tree.Tree, severity string, vulns []string, style lipgloss.Style) {

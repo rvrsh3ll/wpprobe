@@ -24,6 +24,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math"
 )
 
 func LoadPluginEndpointsFromData(data []byte) (map[string][]string, error) {
@@ -48,7 +49,17 @@ func LoadPluginEndpointsFromData(data []byte) (map[string][]string, error) {
 	return pluginEndpoints, nil
 }
 
-func DetectPlugins(detectedEndpoints []string, pluginEndpoints map[string][]string) []string {
+func DetectPlugins(detectedEndpoints []string, pluginEndpoints map[string][]string) (map[string]int, map[string]float64, map[string]bool, []string) {
+
+	/*
+	 🚧 Testing Phase: This solution is an improved compromise to balance detection accuracy
+	 while minimizing false positives. It dynamically adjusts the detection threshold
+	 to ensure we don't exclude plugins too aggressively.
+	*/
+
+	pluginScores := make(map[string]int)
+	pluginConfidence := make(map[string]float64)
+	pluginAmbiguity := make(map[string]bool)
 	var detectedPlugins []string
 
 	for plugin, knownRoutes := range pluginEndpoints {
@@ -65,18 +76,30 @@ func DetectPlugins(detectedEndpoints []string, pluginEndpoints map[string][]stri
 			}
 		}
 
-		threshold := max(1, int(float64(len(knownRoutes))*0.15))
+		threshold := int(math.Max(1, float64(len(knownRoutes))*0.15))
 		if matchCount >= threshold {
+			pluginScores[plugin] = matchCount
+			pluginConfidence[plugin] = (float64(matchCount) / float64(len(knownRoutes))) * 100
 			detectedPlugins = append(detectedPlugins, plugin)
 		}
 	}
 
-	return detectedPlugins
-}
+	ambiguousPlugins := make(map[string][]string)
+	pluginEndpointsMap := make(map[string]string)
 
-func max(a, b int) int {
-	if a > b {
-		return a
+	for _, plugin := range detectedPlugins {
+		endpointsKey := fmt.Sprintf("%v", pluginEndpoints[plugin])
+		pluginEndpointsMap[plugin] = endpointsKey
+		ambiguousPlugins[endpointsKey] = append(ambiguousPlugins[endpointsKey], plugin)
 	}
-	return b
+
+	for _, plugins := range ambiguousPlugins {
+		if len(plugins) > 1 {
+			for _, plugin := range plugins {
+				pluginAmbiguity[plugin] = true
+			}
+		}
+	}
+
+	return pluginScores, pluginConfidence, pluginAmbiguity, detectedPlugins
 }
