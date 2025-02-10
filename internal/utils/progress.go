@@ -1,3 +1,22 @@
+// Copyright (c) 2025 Valentin Lobstein (Chocapikk) <balgogan@protonmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy of
+// this software and associated documentation files (the "Software"), to deal in
+// the Software without restriction, including without limitation the rights to
+// use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+// the Software, and to permit persons to whom the Software is furnished to do so,
+// subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+// FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+// COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+// IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+// CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 package utils
 
 import (
@@ -7,20 +26,31 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cheggaaa/pb/v3"
+	"github.com/k0kubun/go-ansi"
+	"github.com/schollz/progressbar/v3"
 )
 
 type ProgressManager struct {
-	bar *pb.ProgressBar
+	bar *progressbar.ProgressBar
 	mu  sync.Mutex
 }
 
 func NewProgressBar(total int) *ProgressManager {
-	bar := pb.New(total).
-		SetTemplate(pb.ProgressBarTemplate(`{{ cyan "🔎 Scanning:" }} {{ bar . "⏳ " "▓" "░" " " " ⏳" }} {{percent .}} {{counters .}}`)).
-		SetRefreshRate(100 * time.Millisecond).
-		SetWriter(os.Stderr).
-		Start()
+	bar := progressbar.NewOptions(total,
+		progressbar.OptionSetWriter(ansi.NewAnsiStderr()),
+		progressbar.OptionEnableColorCodes(true),
+		progressbar.OptionShowIts(),
+		progressbar.OptionSetDescription("[cyan]🔎 Scanning..."),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "▓",
+			SaucerHead:    "▒",
+			SaucerPadding: "░",
+			BarStart:      "⏳ ",
+			BarEnd:        " ⏳",
+		}),
+		progressbar.OptionSetWidth(30),
+		progressbar.OptionThrottle(100*time.Millisecond),
+	)
 
 	pm := &ProgressManager{bar: bar}
 
@@ -39,7 +69,7 @@ func NewProgressBar(total int) *ProgressManager {
 func (p *ProgressManager) Increment() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.bar.Increment()
+	p.bar.Add(1)
 }
 
 func (p *ProgressManager) Finish() {

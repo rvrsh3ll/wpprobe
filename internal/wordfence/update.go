@@ -1,3 +1,22 @@
+// Copyright (c) 2025 Valentin Lobstein (Chocapikk) <balgogan@protonmail.com>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy of
+// this software and associated documentation files (the "Software"), to deal in
+// the Software without restriction, including without limitation the rights to
+// use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+// the Software, and to permit persons to whom the Software is furnished to do so,
+// subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+// FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+// COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+// IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+// CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 package wordfence
 
 import (
@@ -8,7 +27,6 @@ import (
 	"strings"
 
 	"github.com/Chocapikk/wpprobe/internal/utils"
-	"github.com/Masterminds/semver"
 )
 
 const wordfenceAPI = "https://www.wordfence.com/api/intelligence/v2/vulnerabilities/production"
@@ -183,34 +201,11 @@ func GetVulnerabilitiesForPlugin(plugin string, version string) []Vulnerability 
 		}
 
 		if vuln.Slug == plugin {
-			if isVersionVulnerable(version, vuln.FromVersion, vuln.ToVersion) {
+			if utils.IsVersionVulnerable(version, vuln.FromVersion, vuln.ToVersion) {
 				vulnerabilities = append(vulnerabilities, vuln)
 			}
 		}
 	}
 
 	return vulnerabilities
-}
-
-func isVersionVulnerable(version, fromVersion, toVersion string) bool {
-	if version == "" || fromVersion == "" || toVersion == "" {
-		return false
-	}
-
-	v, err := semver.NewVersion(version)
-	if err != nil {
-		return false
-	}
-
-	from, err := semver.NewVersion(fromVersion)
-	if err != nil {
-		return false
-	}
-
-	to, err := semver.NewVersion(toVersion)
-	if err != nil {
-		return false
-	}
-
-	return v.Compare(from) >= 0 && v.Compare(to) <= 0
 }
