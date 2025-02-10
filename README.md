@@ -47,24 +47,32 @@ Unlike traditional scanners that hammer websites with requests, WPProbe takes a 
 
 ---
 
-## 🔧 Installation  
+## 🔧 Installation
 
-1️⃣ **Clone the repository**  
+### Option 1️⃣ (Quick setup via `go install`)
+
 ```bash
-git clone https://github.com/Chocapikk/wpprobe
-cd wpprobe
+go install github.com/Chocapikk/wpprobe@latest
 ```
+- **Requires Go 1.22+**  
+- Ensure `$(go env GOPATH)/bin` is in your `$PATH`  
 
-2️⃣ **Install dependencies**  
-```bash
-go mod tidy
-```
+### Option 2️⃣ (Manual build)
 
-3️⃣ **Build the binary**  
-```bash
-go build -o wpprobe
-```
-
+1. **Clone the repository**  
+   ```bash
+   git clone https://github.com/Chocapikk/wpprobe
+   cd wpprobe
+   ```
+2. **Install dependencies**  
+   ```bash
+   go mod tidy
+   ```
+3. **Build the binary**  
+   ```bash
+   go build -o wpprobe
+   ```
+   Move or copy `wpprobe` into a directory listed in your `$PATH`.
 ---
 
 ## 🕵️ Usage  
