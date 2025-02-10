@@ -69,6 +69,11 @@ go build -o wpprobe
 
 ## 🕵️ Usage  
 
+**Update the local Wordfence DB first:**  
+```bash
+./wpprobe update
+```
+
 **Basic scan for a single website:**  
 ```bash
 ./wpprobe scan -u https://example.com
@@ -83,8 +88,6 @@ go build -o wpprobe
 ```bash
 ./wpprobe scan -f targets.txt -t 200 -o results.csv
 ```
-
----
 
 ## 📜 Example Output (CSV)  
 
