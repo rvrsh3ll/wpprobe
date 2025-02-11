@@ -24,66 +24,81 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/utils"
 	"github.com/Chocapikk/wpprobe/internal/wordfence"
 	"log"
+	"math"
 	"strings"
 	"sync"
 )
 
-func ScanTargets(url string, file string, noCheckVersion bool, threads int, output string) {
-	var targets []string
-	isFileMode := false
+type ScanOptions struct {
+	URL            string
+	File           string
+	NoCheckVersion bool
+	Threads        int
+	Output         string
+	Verbose        bool
+}
 
-	if file != "" {
-		lines, err := utils.ReadLines(file)
+func ScanTargets(opts ScanOptions) {
+	var targets []string
+
+	if opts.File != "" {
+		lines, err := utils.ReadLines(opts.File)
 		if err != nil {
 			log.Fatalf("❌ Failed to read file: %v", err)
 		}
 		targets = lines
-		isFileMode = true
-	} else if url != "" {
-		targets = append(targets, url)
+	} else if opts.URL != "" {
+		targets = append(targets, opts.URL)
 	} else {
 		log.Fatalf("❌ No target specified. Use -u or -f.")
 	}
 
+	siteThreads := opts.Threads
+	if len(targets) > 1 {
+		siteThreads = int(math.Max(1, float64(opts.Threads)/float64(len(targets))))
+	}
+
 	var progress *utils.ProgressManager
-	if isFileMode {
+	if opts.File != "" {
 		progress = utils.NewProgressBar(len(targets))
 	}
 
 	var csvWriter *utils.CSVWriter
-	if output != "" {
-		csvWriter = utils.NewCSVWriter(output)
+	if opts.Output != "" {
+		csvWriter = utils.NewCSVWriter(opts.Output)
 		defer csvWriter.Close()
 	}
 
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, threads)
+	sem := make(chan struct{}, opts.Threads)
 
 	for _, target := range targets {
 		wg.Add(1)
 		sem <- struct{}{}
 
-		go func(t string) {
+		go func(t string, scanThreads int) {
 			defer wg.Done()
-			ScanSite(t, noCheckVersion, csvWriter, isFileMode, output)
-			if isFileMode {
+			localOpts := opts
+			localOpts.Threads = scanThreads
+			ScanSite(t, localOpts, csvWriter, progress)
+			if opts.File != "" {
 				progress.Increment()
 			}
 			<-sem
-		}(target)
+		}(target, siteThreads)
 	}
 
 	wg.Wait()
 
-	if isFileMode {
+	if opts.File != "" {
 		progress.Finish()
 	}
 }
 
-func ScanSite(target string, noCheckVersion bool, csvWriter *utils.CSVWriter, isFileMode bool, output string) {
+func ScanSite(target string, opts ScanOptions, csvWriter *utils.CSVWriter, progress *utils.ProgressManager) {
 	data, err := utils.GetEmbeddedFile("files/scanned_plugins.json")
 	if err != nil {
-		if !isFileMode {
+		if opts.File == "" {
 			fmt.Printf("\n❌ Failed to load scanned_plugins.json: %v\n", err)
 		}
 		return
@@ -91,7 +106,7 @@ func ScanSite(target string, noCheckVersion bool, csvWriter *utils.CSVWriter, is
 
 	pluginEndpoints, err := LoadPluginEndpointsFromData(data)
 	if err != nil {
-		if !isFileMode {
+		if opts.File == "" {
 			fmt.Printf("\n❌ Failed to parse scanned_plugins.json: %v\n", err)
 		}
 		return
@@ -99,15 +114,16 @@ func ScanSite(target string, noCheckVersion bool, csvWriter *utils.CSVWriter, is
 
 	endpoints := FetchEndpoints(target)
 	if len(endpoints) == 0 {
-		if !isFileMode {
+		if opts.File == "" {
 			fmt.Printf("\n❌ No REST endpoints found on %s\n", target)
 		}
 		return
 	}
 
-	pluginMatches, pluginConfidence, pluginAmbiguity, detectedPlugins := DetectPlugins(endpoints, pluginEndpoints)
-	if len(detectedPlugins) == 0 {
-		if !isFileMode {
+	pluginResult := DetectPlugins(endpoints, pluginEndpoints)
+
+	if len(pluginResult.Detected) == 0 {
+		if opts.File == "" {
 			fmt.Printf("\n❌ No plugins detected on %s\n", target)
 		}
 		return
@@ -117,35 +133,56 @@ func ScanSite(target string, noCheckVersion bool, csvWriter *utils.CSVWriter, is
 	resultsCSV := make(map[string]map[string]map[string][]string)
 	pluginVulns := make(map[string]VulnCategories)
 
-	for _, plugin := range detectedPlugins {
-		version := "unknown"
-		if !noCheckVersion {
-			version = utils.GetPluginVersion(target, plugin)
-		}
-		results[plugin] = version
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	sem := make(chan struct{}, opts.Threads)
 
-		vulns := wordfence.GetVulnerabilitiesForPlugin(plugin, version)
-		vulnCategories := VulnCategories{}
-		vulnMap := make(map[string][]string)
+	for _, plugin := range pluginResult.Detected {
+		wg.Add(1)
+		sem <- struct{}{}
 
-		for _, v := range vulns {
-			vulnMap[v.Severity] = append(vulnMap[v.Severity], v.CVE)
-			switch strings.ToLower(v.Severity) {
-			case "critical":
-				vulnCategories.Critical = append(vulnCategories.Critical, v.CVE)
-			case "high":
-				vulnCategories.High = append(vulnCategories.High, v.CVE)
-			case "medium":
-				vulnCategories.Medium = append(vulnCategories.Medium, v.CVE)
-			case "low":
-				vulnCategories.Low = append(vulnCategories.Low, v.CVE)
+		go func(plugin string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			version := "unknown"
+			if !opts.NoCheckVersion {
+				version = utils.GetPluginVersion(target, plugin, opts.Threads)
 			}
-		}
-		resultsCSV[plugin] = map[string]map[string][]string{version: vulnMap}
-		pluginVulns[plugin] = vulnCategories
+
+			vulns := wordfence.GetVulnerabilitiesForPlugin(plugin, version)
+			vulnCategories := VulnCategories{}
+			vulnMap := make(map[string][]string)
+
+			if len(vulns) == 0 {
+				vulnMap["None"] = []string{"No known vulnerabilities"}
+			} else {
+				for _, v := range vulns {
+					vulnMap[v.Severity] = append(vulnMap[v.Severity], v.CVE)
+					switch strings.ToLower(v.Severity) {
+					case "critical":
+						vulnCategories.Critical = append(vulnCategories.Critical, v.CVE)
+					case "high":
+						vulnCategories.High = append(vulnCategories.High, v.CVE)
+					case "medium":
+						vulnCategories.Medium = append(vulnCategories.Medium, v.CVE)
+					case "low":
+						vulnCategories.Low = append(vulnCategories.Low, v.CVE)
+					}
+				}
+			}
+
+			mu.Lock()
+			results[plugin] = version
+			resultsCSV[plugin] = map[string]map[string][]string{version: vulnMap}
+			pluginVulns[plugin] = vulnCategories
+			mu.Unlock()
+		}(plugin)
 	}
 
-	DisplayResults(target, results, pluginMatches, pluginConfidence, pluginAmbiguity, pluginVulns)
+	wg.Wait()
+
+	DisplayResults(target, results, pluginResult, pluginVulns, opts, progress)
 
 	if csvWriter != nil {
 		csvWriter.WriteResults(target, resultsCSV)

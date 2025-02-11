@@ -77,3 +77,21 @@ func (p *ProgressManager) Finish() {
 	defer p.mu.Unlock()
 	p.bar.Finish()
 }
+
+func (p *ProgressManager) RenderBlank() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.bar.RenderBlank()
+}
+
+func (p *ProgressManager) Bprintln(a ...interface{}) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return progressbar.Bprintln(p.bar, a...)
+}
+
+func (p *ProgressManager) Bprintf(format string, a ...interface{}) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return progressbar.Bprintf(p.bar, format, a...)
+}

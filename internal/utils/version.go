@@ -24,20 +24,41 @@ import (
 	"github.com/Masterminds/semver"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
-func GetPluginVersion(target, plugin string) string {
+func GetPluginVersion(target, plugin string, threads int) string {
 	httpClient := NewHTTPClient(10 * time.Second)
+	versionChan := make(chan string, 2)
 
-	version := fetchVersionFromReadme(httpClient, target, plugin)
-	if version == "" {
-		version = fetchVersionFromStyle(httpClient, target, plugin)
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		if version := fetchVersionFromReadme(httpClient, target, plugin); version != "" {
+			versionChan <- version
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if version := fetchVersionFromStyle(httpClient, target, plugin); version != "" {
+			versionChan <- version
+		}
+	}()
+
+	go func() {
+		wg.Wait()
+		close(versionChan)
+	}()
+
+	for version := range versionChan {
+		return version
 	}
-	if version == "" {
-		return "unknown"
-	}
-	return version
+
+	return "unknown"
 }
 
 func fetchVersionFromReadme(client *HTTPClientManager, target, plugin string) string {

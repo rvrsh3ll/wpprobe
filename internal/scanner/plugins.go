@@ -27,6 +27,13 @@ import (
 	"math"
 )
 
+type PluginDetectionResult struct {
+	Scores     map[string]int
+	Confidence map[string]float64
+	Ambiguity  map[string]bool
+	Detected   []string
+}
+
 func LoadPluginEndpointsFromData(data []byte) (map[string][]string, error) {
 	pluginEndpoints := make(map[string][]string)
 	scanner := bufio.NewScanner(bytes.NewReader(data))
@@ -49,13 +56,7 @@ func LoadPluginEndpointsFromData(data []byte) (map[string][]string, error) {
 	return pluginEndpoints, nil
 }
 
-func DetectPlugins(detectedEndpoints []string, pluginEndpoints map[string][]string) (map[string]int, map[string]float64, map[string]bool, []string) {
-
-	/*
-	 🚧 Testing Phase: This solution is an improved compromise to balance detection accuracy
-	 while minimizing false positives. It dynamically adjusts the detection threshold
-	 to ensure we don't exclude plugins too aggressively.
-	*/
+func DetectPlugins(detectedEndpoints []string, pluginEndpoints map[string][]string) PluginDetectionResult {
 
 	pluginScores := make(map[string]int)
 	pluginConfidence := make(map[string]float64)
@@ -101,5 +102,10 @@ func DetectPlugins(detectedEndpoints []string, pluginEndpoints map[string][]stri
 		}
 	}
 
-	return pluginScores, pluginConfidence, pluginAmbiguity, detectedPlugins
+	return PluginDetectionResult{
+		Scores:     pluginScores,
+		Confidence: pluginConfidence,
+		Ambiguity:  pluginAmbiguity,
+		Detected:   detectedPlugins,
+	}
 }
