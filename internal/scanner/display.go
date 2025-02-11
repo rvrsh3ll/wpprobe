@@ -124,13 +124,38 @@ func DisplayResults(target string, detectedPlugins map[string]string, pluginResu
 }
 
 func sortedPluginsByConfidence(detectedPlugins map[string]string, pluginConfidence map[string]float64) []string {
-	sortedPlugins := make([]string, 0, len(detectedPlugins))
-	for plugin := range detectedPlugins {
-		sortedPlugins = append(sortedPlugins, plugin)
+	type PluginData struct {
+		name       string
+		confidence float64
+		noVersion  bool
+		noVuln     bool
 	}
-	sort.Slice(sortedPlugins, func(i, j int) bool {
-		return pluginConfidence[sortedPlugins[i]] > pluginConfidence[sortedPlugins[j]]
+
+	plugins := make([]PluginData, 0, len(detectedPlugins))
+	for plugin, version := range detectedPlugins {
+		noVersion := version == "unknown"
+		plugins = append(plugins, PluginData{
+			name:       plugin,
+			confidence: pluginConfidence[plugin],
+			noVersion:  noVersion,
+			noVuln:     true,
+		})
+	}
+
+	sort.Slice(plugins, func(i, j int) bool {
+		if plugins[i].noVersion && !plugins[j].noVersion {
+			return true
+		}
+		if !plugins[i].noVersion && plugins[j].noVersion {
+			return false
+		}
+		return plugins[i].confidence > plugins[j].confidence
 	})
+
+	sortedPlugins := make([]string, len(plugins))
+	for i, p := range plugins {
+		sortedPlugins[i] = p.name
+	}
 	return sortedPlugins
 }
 
