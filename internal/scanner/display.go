@@ -89,7 +89,7 @@ func DisplayResults(target string, detectedPlugins map[string]string, pluginResu
 
 		pluginLabel := fmt.Sprintf("%s (%s)", plugin, version)
 		if pluginResult.Ambiguity[plugin] {
-			pluginLabel = fmt.Sprintf("%s (%s) ⚠️ Ambiguity detected!", plugin, version)
+			pluginLabel = fmt.Sprintf("%s (%s) ⚠️ Ambiguity!", plugin, version)
 		} else if version == "unknown" {
 			pluginLabel = fmt.Sprintf("%s (%s) [%.2f%% confidence]", plugin, version, confidence)
 		}

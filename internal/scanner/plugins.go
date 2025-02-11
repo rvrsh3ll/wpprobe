@@ -28,10 +28,11 @@ import (
 )
 
 type PluginDetectionResult struct {
-	Scores     map[string]int
-	Confidence map[string]float64
-	Ambiguity  map[string]bool
-	Detected   []string
+	Scores     map[string]int     
+	Confidence map[string]float64  
+	Ambiguity  map[string]bool     
+	Detected   []string            
+	Matches    map[string][]string
 }
 
 func LoadPluginEndpointsFromData(data []byte) (map[string][]string, error) {
@@ -57,7 +58,6 @@ func LoadPluginEndpointsFromData(data []byte) (map[string][]string, error) {
 }
 
 func DetectPlugins(detectedEndpoints []string, pluginEndpoints map[string][]string) PluginDetectionResult {
-
 	pluginScores := make(map[string]int)
 	pluginConfidence := make(map[string]float64)
 	pluginAmbiguity := make(map[string]bool)
@@ -85,16 +85,15 @@ func DetectPlugins(detectedEndpoints []string, pluginEndpoints map[string][]stri
 		}
 	}
 
-	ambiguousPlugins := make(map[string][]string)
+	ambiguousGroups := make(map[string][]string)
 	pluginEndpointsMap := make(map[string]string)
-
 	for _, plugin := range detectedPlugins {
 		endpointsKey := fmt.Sprintf("%v", pluginEndpoints[plugin])
 		pluginEndpointsMap[plugin] = endpointsKey
-		ambiguousPlugins[endpointsKey] = append(ambiguousPlugins[endpointsKey], plugin)
+		ambiguousGroups[endpointsKey] = append(ambiguousGroups[endpointsKey], plugin)
 	}
 
-	for _, plugins := range ambiguousPlugins {
+	for _, plugins := range ambiguousGroups {
 		if len(plugins) > 1 {
 			for _, plugin := range plugins {
 				pluginAmbiguity[plugin] = true
@@ -102,10 +101,17 @@ func DetectPlugins(detectedEndpoints []string, pluginEndpoints map[string][]stri
 		}
 	}
 
+	matches := make(map[string][]string)
+	for _, plugin := range detectedPlugins {
+		key := pluginEndpointsMap[plugin]
+		matches[plugin] = ambiguousGroups[key]
+	}
+
 	return PluginDetectionResult{
 		Scores:     pluginScores,
 		Confidence: pluginConfidence,
 		Ambiguity:  pluginAmbiguity,
 		Detected:   detectedPlugins,
+		Matches:    matches,
 	}
 }

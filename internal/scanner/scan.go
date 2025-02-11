@@ -132,6 +132,7 @@ func ScanSite(target string, opts ScanOptions, csvWriter *utils.CSVWriter, progr
 	results := make(map[string]string)
 	resultsCSV := make(map[string]map[string]map[string][]string)
 	pluginVulns := make(map[string]VulnCategories)
+	pluginVersions := make(map[string]string)
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -174,6 +175,7 @@ func ScanSite(target string, opts ScanOptions, csvWriter *utils.CSVWriter, progr
 
 			mu.Lock()
 			results[plugin] = version
+			pluginVersions[plugin] = version
 			resultsCSV[plugin] = map[string]map[string][]string{version: vulnMap}
 			pluginVulns[plugin] = vulnCategories
 			mu.Unlock()
@@ -182,9 +184,34 @@ func ScanSite(target string, opts ScanOptions, csvWriter *utils.CSVWriter, progr
 
 	wg.Wait()
 
+	ambiguousGroups := make(map[string][]string)
+	for plugin := range pluginResult.Ambiguity {
+		groupKey := fmt.Sprintf("%v", pluginResult.Matches[plugin])
+		ambiguousGroups[groupKey] = append(ambiguousGroups[groupKey], plugin)
+	}
+
+	for _, group := range ambiguousGroups {
+		var hasVersion bool
+		for _, plugin := range group {
+			if results[plugin] != "unknown" {
+				hasVersion = true
+				break
+			}
+		}
+		if hasVersion {
+			for _, plugin := range group {
+				if results[plugin] == "unknown" {
+					delete(results, plugin)
+					delete(pluginVulns, plugin)
+				}
+			}
+		}
+	}
+
 	DisplayResults(target, results, pluginResult, pluginVulns, opts, progress)
 
 	if csvWriter != nil {
 		csvWriter.WriteResults(target, resultsCSV)
 	}
 }
+
