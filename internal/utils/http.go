@@ -21,7 +21,6 @@ package utils
 
 import (
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"io"
 	"time"
@@ -30,7 +29,9 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-const maxResponseSize = 10485760
+const maxResponseSizeMB = 20
+
+var maxResponseSize = maxResponseSizeMB * 1024 * 1024
 
 type HTTPClientManager struct {
 	client *resty.Client
@@ -50,11 +51,12 @@ func NewHTTPClient(timeout time.Duration) *HTTPClientManager {
 		SetRedirectPolicy(resty.NoRedirectPolicy()).
 		SetRetryCount(2).
 		SetLogger(&SilentLogger{})
+
 	client.OnBeforeRequest(func(c *resty.Client, r *resty.Request) error {
 		r.SetHeader("User-Agent", uarand.GetRandom())
-		r.SetHeader("Range", "bytes=0-1048576")
 		return nil
 	})
+
 	return &HTTPClientManager{client: client}
 }
 
@@ -64,7 +66,8 @@ func (h *HTTPClientManager) Get(url string) (string, error) {
 		return "", nil
 	}
 	defer resp.RawBody().Close()
-	limited := io.LimitReader(resp.RawBody(), maxResponseSize)
+
+	limited := io.LimitReader(resp.RawBody(), int64(maxResponseSize))
 	data, err := io.ReadAll(limited)
 	if err != nil {
 		return "", nil
@@ -73,18 +76,4 @@ func (h *HTTPClientManager) Get(url string) (string, error) {
 		return "", errors.New("response too large")
 	}
 	return string(data), nil
-}
-
-func (h *HTTPClientManager) GetJSON(url string, result interface{}) error {
-	resp, err := h.client.R().SetDoNotParseResponse(true).Get(url)
-	if err != nil {
-		return nil
-	}
-	defer resp.RawBody().Close()
-	if resp.IsError() {
-		return nil
-	}
-	limited := io.LimitReader(resp.RawBody(), maxResponseSize)
-	_ = json.NewDecoder(limited).Decode(result)
-	return nil
 }
