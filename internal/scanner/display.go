@@ -56,16 +56,16 @@ type VulnCategories struct {
 func DisplayResults(target string, detectedPlugins map[string]string, pluginResult PluginDetectionResult, pluginVulns map[string]VulnCategories, opts ScanOptions, progress *utils.ProgressManager) {
 	vulnTypes := []string{"Critical", "High", "Medium", "Low"}
 	vulnStyles := []lipgloss.Style{criticalStyle, highStyle, mediumStyle, lowStyle}
-
 	vulnSummary := map[string]int{}
-	for _, vulnType := range vulnTypes {
-		vulnSummary[vulnType] = 0
+
+	for _, t := range vulnTypes {
+		vulnSummary[t] = 0
 	}
-	for _, vulnCategories := range pluginVulns {
-		vulnSummary["Critical"] += len(vulnCategories.Critical)
-		vulnSummary["High"] += len(vulnCategories.High)
-		vulnSummary["Medium"] += len(vulnCategories.Medium)
-		vulnSummary["Low"] += len(vulnCategories.Low)
+	for _, cat := range pluginVulns {
+		vulnSummary["Critical"] += len(cat.Critical)
+		vulnSummary["High"] += len(cat.High)
+		vulnSummary["Medium"] += len(cat.Medium)
+		vulnSummary["Low"] += len(cat.Low)
 	}
 
 	if progress != nil {
@@ -73,23 +73,20 @@ func DisplayResults(target string, detectedPlugins map[string]string, pluginResu
 	}
 
 	var summaryParts []string
-	for i, vulnType := range vulnTypes {
-		summaryParts = append(summaryParts, fmt.Sprintf("%s: %d", vulnStyles[i].Render(vulnType), vulnSummary[vulnType]))
+	for i, t := range vulnTypes {
+		summaryParts = append(summaryParts, fmt.Sprintf("%s: %d", vulnStyles[i].Render(t), vulnSummary[t]))
 	}
 	summaryLine := fmt.Sprintf("🔎 %s (%s)", urlStyle.Render(target), strings.Join(summaryParts, " | "))
-
 	root := tree.Root(titleStyle.Render(summaryLine))
 
 	for _, plugin := range sortedPluginsByConfidence(detectedPlugins, pluginResult.Confidence) {
 		version := detectedPlugins[plugin]
 		vulnCategories := pluginVulns[plugin]
 		confidence := pluginResult.Confidence[plugin]
-
 		pluginColor := getPluginColor(version, vulnCategories)
-
 		pluginLabel := fmt.Sprintf("%s (%s)", plugin, version)
 		if pluginResult.Ambiguity[plugin] {
-			pluginLabel = fmt.Sprintf("%s (%s) ⚠️ Ambiguity!", plugin, version)
+			pluginLabel = fmt.Sprintf("%s (%s) ⚠️", plugin, version)
 		} else if version == "unknown" {
 			pluginLabel = fmt.Sprintf("%s (%s) [%.2f%% confidence]", plugin, version, confidence)
 		}
@@ -114,8 +111,11 @@ func DisplayResults(target string, detectedPlugins map[string]string, pluginResu
 		root.Child(pluginNode)
 	}
 
-	encapsulatedResults := separatorStyle.Render(root.String())
+	if len(pluginResult.Ambiguity) > 0 {
+		root.Child(tree.Root("⚠️ indicates that multiple plugins share common endpoints; only one of these is likely active."))
+	}
 
+	encapsulatedResults := separatorStyle.Render(root.String())
 	if progress != nil {
 		progress.Bprintln(encapsulatedResults)
 	} else {

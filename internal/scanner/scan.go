@@ -214,4 +214,3 @@ func ScanSite(target string, opts ScanOptions, csvWriter *utils.CSVWriter, progr
 		csvWriter.WriteResults(target, resultsCSV)
 	}
 }
-

@@ -28,10 +28,10 @@ import (
 )
 
 type PluginDetectionResult struct {
-	Scores     map[string]int     
-	Confidence map[string]float64  
-	Ambiguity  map[string]bool     
-	Detected   []string            
+	Scores     map[string]int
+	Confidence map[string]float64
+	Ambiguity  map[string]bool
+	Detected   []string
 	Matches    map[string][]string
 }
 
