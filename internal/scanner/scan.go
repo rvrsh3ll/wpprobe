@@ -45,19 +45,14 @@ func ScanTargets(opts ScanOptions) {
 	if opts.File != "" {
 		lines, err := utils.ReadLines(opts.File)
 		if err != nil {
-			log.Fatalf("❌ Failed to read file: %v", err)
+			log.Fatalf("❌ Failed to read file: %v\n", err)
 		}
 		targets = lines
-	} else if opts.URL != "" {
-		targets = append(targets, opts.URL)
 	} else {
-		log.Fatalf("❌ No target specified. Use -u or -f.")
+		targets = append(targets, opts.URL)
 	}
 
-	siteThreads := opts.Threads
-	if len(targets) > 1 {
-		siteThreads = int(math.Max(1, float64(opts.Threads)/float64(len(targets))))
-	}
+	siteThreads := int(math.Max(1, float64(opts.Threads)/float64(len(targets))))
 
 	var progress *utils.ProgressManager
 	if opts.File != "" {
@@ -79,10 +74,14 @@ func ScanTargets(opts ScanOptions) {
 
 		go func(t string, scanThreads int) {
 			defer wg.Done()
+			defer func() { <-sem }()
+			defer func() {
+				_ = recover()
+			}()
+
 			localOpts := opts
 			localOpts.Threads = scanThreads
 			ScanSite(t, localOpts, writer, progress)
-			<-sem
 		}(target, siteThreads)
 	}
 
@@ -93,12 +92,18 @@ func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, pro
 	data, err := utils.GetEmbeddedFile("files/scanned_plugins.json")
 	if err != nil {
 		fmt.Printf("\n❌ Failed to load scanned_plugins.json: %v\n", err)
+		if progress != nil {
+			progress.Increment()
+		}
 		return
 	}
 
 	pluginEndpoints, err := LoadPluginEndpointsFromData(data)
 	if err != nil {
 		fmt.Printf("\n❌ Failed to parse scanned_plugins.json: %v\n", err)
+		if progress != nil {
+			progress.Increment()
+		}
 		return
 	}
 
@@ -107,6 +112,9 @@ func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, pro
 		if opts.File == "" {
 			fmt.Printf("\n❌ No REST endpoints found on %s\n", target)
 		}
+		if progress != nil {
+			progress.Increment()
+		}
 		return
 	}
 
@@ -114,6 +122,9 @@ func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, pro
 	if len(pluginResult.Detected) == 0 {
 		if opts.File == "" {
 			fmt.Printf("\n❌ No plugins detected on %s\n", target)
+		}
+		if progress != nil {
+			progress.Increment()
 		}
 		return
 	}
@@ -134,6 +145,9 @@ func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, pro
 		go func(plugin string) {
 			defer wg.Done()
 			defer func() { <-sem }()
+			defer func() {
+				_ = recover()
+			}()
 
 			version := "unknown"
 			if !opts.NoCheckVersion {
@@ -141,8 +155,13 @@ func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, pro
 			}
 
 			vulns := wordfence.GetVulnerabilitiesForPlugin(plugin, version)
+			if vulns == nil {
+				return
+			}
+
 			vulnCategories := VulnCategories{}
 
+			mu.Lock()
 			for _, v := range vulns {
 				switch strings.ToLower(v.Severity) {
 				case "critical":
@@ -155,17 +174,13 @@ func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, pro
 					vulnCategories.Low = append(vulnCategories.Low, v.CVE)
 				}
 
-				mu.Lock()
 				resultsList = append(resultsList, utils.PluginEntry{
 					Plugin:   plugin,
 					Version:  version,
 					Severity: v.Severity,
 					CVEs:     []string{v.CVE},
 				})
-				mu.Unlock()
 			}
-
-			mu.Lock()
 			results[plugin] = version
 			pluginVersions[plugin] = version
 			pluginVulns[plugin] = vulnCategories

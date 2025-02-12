@@ -63,17 +63,22 @@ func NewHTTPClient(timeout time.Duration) *HTTPClientManager {
 func (h *HTTPClientManager) Get(url string) (string, error) {
 	resp, err := h.client.R().SetDoNotParseResponse(true).Get(url)
 	if err != nil {
-		return "", nil
+		return "", err
+	}
+	if resp == nil || resp.RawBody() == nil {
+		return "", errors.New("empty response")
 	}
 	defer resp.RawBody().Close()
 
 	limited := io.LimitReader(resp.RawBody(), int64(maxResponseSize))
 	data, err := io.ReadAll(limited)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
+
 	if len(data) >= maxResponseSize {
 		return "", errors.New("response too large")
 	}
+
 	return string(data), nil
 }
