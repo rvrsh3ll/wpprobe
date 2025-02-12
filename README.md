@@ -73,6 +73,17 @@ go install github.com/Chocapikk/wpprobe@latest
    go build -o wpprobe
    ```
    Move or copy `wpprobe` into a directory listed in your `$PATH`.
+
+### Option 3️⃣ (Docker)
+1. **Build Image**
+   ```bash
+   docker build -t wpprobe .
+   ```
+2. **Run**
+   ```bash
+   docker run -it --rm wpprobe
+   ```
+
 ---
 
 ## 🕵️ Usage  
