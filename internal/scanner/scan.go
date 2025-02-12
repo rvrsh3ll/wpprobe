@@ -35,6 +35,7 @@ type ScanOptions struct {
 	NoCheckVersion bool
 	Threads        int
 	Output         string
+	OutputFormat   string
 	Verbose        bool
 }
 
@@ -63,10 +64,10 @@ func ScanTargets(opts ScanOptions) {
 		progress = utils.NewProgressBar(len(targets))
 	}
 
-	var csvWriter *utils.CSVWriter
+	var writer utils.WriterInterface
 	if opts.Output != "" {
-		csvWriter = utils.NewCSVWriter(opts.Output)
-		defer csvWriter.Close()
+		writer = utils.GetWriter(opts.Output)
+		defer writer.Close()
 	}
 
 	var wg sync.WaitGroup
@@ -80,35 +81,24 @@ func ScanTargets(opts ScanOptions) {
 			defer wg.Done()
 			localOpts := opts
 			localOpts.Threads = scanThreads
-			ScanSite(t, localOpts, csvWriter, progress)
-			if opts.File != "" {
-				progress.Increment()
-			}
+			ScanSite(t, localOpts, writer, progress)
 			<-sem
 		}(target, siteThreads)
 	}
 
 	wg.Wait()
-
-	if opts.File != "" {
-		progress.Finish()
-	}
 }
 
-func ScanSite(target string, opts ScanOptions, csvWriter *utils.CSVWriter, progress *utils.ProgressManager) {
+func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, progress *utils.ProgressManager) {
 	data, err := utils.GetEmbeddedFile("files/scanned_plugins.json")
 	if err != nil {
-		if opts.File == "" {
-			fmt.Printf("\n❌ Failed to load scanned_plugins.json: %v\n", err)
-		}
+		fmt.Printf("\n❌ Failed to load scanned_plugins.json: %v\n", err)
 		return
 	}
 
 	pluginEndpoints, err := LoadPluginEndpointsFromData(data)
 	if err != nil {
-		if opts.File == "" {
-			fmt.Printf("\n❌ Failed to parse scanned_plugins.json: %v\n", err)
-		}
+		fmt.Printf("\n❌ Failed to parse scanned_plugins.json: %v\n", err)
 		return
 	}
 
@@ -121,7 +111,6 @@ func ScanSite(target string, opts ScanOptions, csvWriter *utils.CSVWriter, progr
 	}
 
 	pluginResult := DetectPlugins(endpoints, pluginEndpoints)
-
 	if len(pluginResult.Detected) == 0 {
 		if opts.File == "" {
 			fmt.Printf("\n❌ No plugins detected on %s\n", target)
@@ -130,9 +119,9 @@ func ScanSite(target string, opts ScanOptions, csvWriter *utils.CSVWriter, progr
 	}
 
 	results := make(map[string]string)
-	resultsCSV := make(map[string]map[string]map[string][]string)
 	pluginVulns := make(map[string]VulnCategories)
 	pluginVersions := make(map[string]string)
+	var resultsList []utils.PluginEntry
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
@@ -153,30 +142,32 @@ func ScanSite(target string, opts ScanOptions, csvWriter *utils.CSVWriter, progr
 
 			vulns := wordfence.GetVulnerabilitiesForPlugin(plugin, version)
 			vulnCategories := VulnCategories{}
-			vulnMap := make(map[string][]string)
 
-			if len(vulns) == 0 {
-				vulnMap["None"] = []string{"No known vulnerabilities"}
-			} else {
-				for _, v := range vulns {
-					vulnMap[v.Severity] = append(vulnMap[v.Severity], v.CVE)
-					switch strings.ToLower(v.Severity) {
-					case "critical":
-						vulnCategories.Critical = append(vulnCategories.Critical, v.CVE)
-					case "high":
-						vulnCategories.High = append(vulnCategories.High, v.CVE)
-					case "medium":
-						vulnCategories.Medium = append(vulnCategories.Medium, v.CVE)
-					case "low":
-						vulnCategories.Low = append(vulnCategories.Low, v.CVE)
-					}
+			for _, v := range vulns {
+				switch strings.ToLower(v.Severity) {
+				case "critical":
+					vulnCategories.Critical = append(vulnCategories.Critical, v.CVE)
+				case "high":
+					vulnCategories.High = append(vulnCategories.High, v.CVE)
+				case "medium":
+					vulnCategories.Medium = append(vulnCategories.Medium, v.CVE)
+				case "low":
+					vulnCategories.Low = append(vulnCategories.Low, v.CVE)
 				}
+
+				mu.Lock()
+				resultsList = append(resultsList, utils.PluginEntry{
+					Plugin:   plugin,
+					Version:  version,
+					Severity: v.Severity,
+					CVEs:     []string{v.CVE},
+				})
+				mu.Unlock()
 			}
 
 			mu.Lock()
 			results[plugin] = version
 			pluginVersions[plugin] = version
-			resultsCSV[plugin] = map[string]map[string][]string{version: vulnMap}
 			pluginVulns[plugin] = vulnCategories
 			mu.Unlock()
 		}(plugin)
@@ -184,33 +175,13 @@ func ScanSite(target string, opts ScanOptions, csvWriter *utils.CSVWriter, progr
 
 	wg.Wait()
 
-	ambiguousGroups := make(map[string][]string)
-	for plugin := range pluginResult.Ambiguity {
-		groupKey := fmt.Sprintf("%v", pluginResult.Matches[plugin])
-		ambiguousGroups[groupKey] = append(ambiguousGroups[groupKey], plugin)
+	if progress != nil {
+		progress.Increment()
 	}
 
-	for _, group := range ambiguousGroups {
-		var hasVersion bool
-		for _, plugin := range group {
-			if results[plugin] != "unknown" {
-				hasVersion = true
-				break
-			}
-		}
-		if hasVersion {
-			for _, plugin := range group {
-				if results[plugin] == "unknown" {
-					delete(results, plugin)
-					delete(pluginVulns, plugin)
-				}
-			}
-		}
+	if writer != nil {
+		writer.WriteResults(target, resultsList)
 	}
 
 	DisplayResults(target, results, pluginResult, pluginVulns, opts, progress)
-
-	if csvWriter != nil {
-		csvWriter.WriteResults(target, resultsCSV)
-	}
 }

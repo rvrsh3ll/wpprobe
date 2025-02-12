@@ -24,6 +24,7 @@ import (
 	"os"
 
 	"github.com/Chocapikk/wpprobe/internal/scanner"
+	"github.com/Chocapikk/wpprobe/internal/utils"
 	"github.com/spf13/cobra"
 )
 
@@ -32,12 +33,16 @@ var scanCmd = &cobra.Command{
 	Short: "Scan a WordPress site for installed plugins and vulnerabilities",
 	Long:  `Scans a WordPress site to detect installed plugins and check for known vulnerabilities using the Wordfence database.`,
 	Run: func(cmd *cobra.Command, args []string) {
+		outputFile := cmd.Flag("output").Value.String()
+		outputFormat := utils.DetectOutputFormat(outputFile)
+
 		opts := scanner.ScanOptions{
 			URL:            cmd.Flag("url").Value.String(),
 			File:           cmd.Flag("file").Value.String(),
 			NoCheckVersion: mustBool(cmd.Flags().GetBool("no-check-version")),
 			Threads:        mustInt(cmd.Flags().GetInt("threads")),
-			Output:         cmd.Flag("output").Value.String(),
+			Output:         outputFile,
+			OutputFormat:   outputFormat,
 			Verbose:        mustBool(cmd.Flags().GetBool("verbose")),
 		}
 
@@ -55,7 +60,7 @@ func init() {
 	scanCmd.Flags().StringP("file", "f", "", "File containing a list of URLs")
 	scanCmd.Flags().Bool("no-check-version", false, "Skip plugin version checking")
 	scanCmd.Flags().IntP("threads", "t", 10, "Number of concurrent threads")
-	scanCmd.Flags().StringP("output", "o", "", "Output file to save results")
+	scanCmd.Flags().StringP("output", "o", "", "Output file to save results (csv, json)")
 	scanCmd.Flags().BoolP("verbose", "v", false, "Enable verbose output")
 }
 

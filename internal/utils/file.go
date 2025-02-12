@@ -21,13 +21,26 @@ package utils
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/csv"
-	"path/filepath"
-
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
+
+type WriterInterface interface {
+	WriteResults(url string, results []PluginEntry)
+	Close()
+}
+
+type PluginEntry struct {
+	Plugin   string   `json:"plugin"`
+	Version  string   `json:"version"`
+	Severity string   `json:"severity"`
+	CVEs     []string `json:"cves"`
+}
 
 type CSVWriter struct {
 	file   *os.File
@@ -38,41 +51,139 @@ func NewCSVWriter(output string) *CSVWriter {
 	file, err := os.Create(output)
 	if err != nil {
 		fmt.Printf("❌ Failed to create CSV file: %v\n", err)
-		os.Exit(1)
+		return nil
 	}
 
 	writer := csv.NewWriter(file)
 	header := []string{"URL", "Plugin", "Version", "Severity", "CVEs"}
-	if err := writer.Write(header); err != nil {
-		fmt.Printf("❌ Failed to write CSV header: %v\n", err)
-		os.Exit(1)
-	}
+	_ = writer.Write(header)
 	writer.Flush()
 
 	return &CSVWriter{file: file, writer: writer}
 }
 
-func (c *CSVWriter) WriteResults(url string, results map[string]map[string]map[string][]string) {
-	for plugin, versions := range results {
-		for version, vulnMap := range versions {
-			for severity, cves := range vulnMap {
-				row := []string{
-					url,
-					plugin,
-					version,
-					severity,
-					strings.Join(cves, ", "),
-				}
-				_ = c.writer.Write(row)
-			}
+func (c *CSVWriter) WriteResults(url string, results []PluginEntry) {
+	for _, entry := range results {
+		row := []string{
+			url,
+			entry.Plugin,
+			entry.Version,
+			entry.Severity,
+			strings.Join(entry.CVEs, ", "),
 		}
+		_ = c.writer.Write(row)
 	}
 	c.writer.Flush()
 }
 
 func (c *CSVWriter) Close() {
-	c.writer.Flush()
-	_ = c.file.Close()
+	if c.file != nil {
+		c.writer.Flush()
+		_ = c.file.Close()
+	}
+}
+
+type JSONWriter struct {
+	file    *os.File
+	encoder *json.Encoder
+	first   bool
+}
+
+func NewJSONWriter(output string) *JSONWriter {
+	file, err := os.Create(output)
+	if err != nil {
+		fmt.Printf("❌ Failed to create JSON file: %v\n", err)
+		os.Exit(1)
+	}
+
+	writer := &JSONWriter{
+		file:    file,
+		encoder: json.NewEncoder(file),
+		first:   true,
+	}
+
+	return writer
+}
+
+func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
+	groupedResults := make(map[string]map[string]map[string][]string)
+
+	for _, entry := range results {
+		if _, exists := groupedResults[entry.Plugin]; !exists {
+			groupedResults[entry.Plugin] = make(map[string]map[string][]string)
+		}
+		if _, exists := groupedResults[entry.Plugin][entry.Version]; !exists {
+			groupedResults[entry.Plugin][entry.Version] = make(map[string][]string)
+		}
+		groupedResults[entry.Plugin][entry.Version][entry.Severity] = append(groupedResults[entry.Plugin][entry.Version][entry.Severity], entry.CVEs...)
+	}
+
+	pluginsFormatted := make(map[string][]map[string]interface{})
+
+	for plugin, versions := range groupedResults {
+		for version, severities := range versions {
+			pluginsFormatted[plugin] = append(pluginsFormatted[plugin], map[string]interface{}{
+				"version":    version,
+				"severities": severities,
+			})
+		}
+	}
+
+	entry := map[string]interface{}{
+		"url":     url,
+		"plugins": pluginsFormatted,
+	}
+
+	var buffer bytes.Buffer
+	encoder := json.NewEncoder(&buffer)
+	_ = encoder.Encode(entry)
+
+	data := buffer.Bytes()
+	data = data[:len(data)-1]
+
+	if !j.first {
+		_, _ = j.file.WriteString("\n")
+	}
+	j.first = false
+
+	_, _ = j.file.Write(data)
+}
+
+func (j *JSONWriter) Close() {
+	_ = j.file.Close()
+}
+
+func GetWriter(outputFile string) WriterInterface {
+	format := DetectOutputFormat(outputFile)
+
+	switch format {
+	case "json":
+		return NewJSONWriter(outputFile)
+	default:
+		return NewCSVWriter(outputFile)
+	}
+}
+
+func DetectOutputFormat(outputFile string) string {
+	if outputFile == "" {
+		return "csv"
+	}
+
+	ext := strings.TrimPrefix(filepath.Ext(outputFile), ".")
+	supported := []string{"csv", "json"}
+
+	for _, format := range supported {
+		if ext == format {
+			return format
+		}
+	}
+
+	fmt.Printf("⚠️ Unsupported output format: %s. Supported: csv, json. Defaulting to CSV.\n", ext)
+	return "csv"
+}
+
+func getSupportedFormats() []string {
+	return []string{"csv", "json"}
 }
 
 func FormatVulnerabilities(vulnMap map[string][]string) string {

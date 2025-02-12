@@ -23,7 +23,7 @@ Unlike traditional scanners that hammer websites with requests, WPProbe takes a 
 3️⃣ **Match** the discovered endpoints with known plugin signatures.  
 4️⃣ **Retrieve** the installed version (when possible) by extracting metadata from files like `readme.txt`.  
 5️⃣ **Correlate** detected plugins with publicly known vulnerabilities (CVE mapping).  
-6️⃣ **Output** the results in a structured CSV format, making post-processing easy.  
+6️⃣ **Output** the results in a structured format (CSV or JSON) for easy analysis.  
 
 🔥 **This means fewer requests, faster scans, and a lower chance of getting blocked by WAFs or security plugins!**  
 
@@ -34,7 +34,7 @@ Unlike traditional scanners that hammer websites with requests, WPProbe takes a 
 ✅ **Stealthy detection** – No need to brute-force plugins; just ask WordPress nicely.  
 ✅ **High-speed scanning** – Multithreaded scanning with a sleek progress bar.  
 ✅ **Vulnerability mapping** – Automatically associates detected plugins with known CVEs.  
-✅ **CSV output** – Structured output for easy analysis and reporting.  
+✅ **Multiple output formats** – Save results in **CSV** or **JSON**.  
 ✅ **Resilient scanning** – Handles sites with missing version info gracefully.  
 
 ---
@@ -98,23 +98,70 @@ go install github.com/Chocapikk/wpprobe@latest
 ./wpprobe scan -u https://example.com
 ```
 
-**Scan multiple targets from a file with 200 concurrent threads:**  
+**Scan multiple targets from a file with 20 concurrent threads:**  
 ```bash
-./wpprobe scan -f targets.txt -t 200
+./wpprobe scan -f targets.txt -t 20
 ```
 
 **Save results to a CSV file:**  
 ```bash
-./wpprobe scan -f targets.txt -t 200 -o results.csv
+./wpprobe scan -f targets.txt -t 20 -o results.csv
 ```
 
-## 📜 Example Output (CSV)  
+**Save results to a JSON file:**  
+```bash
+./wpprobe scan -f targets.txt -t 20 -o results.json
+```
+
+---
+
+## 📜 Example Output  
+
+### **CSV Format**  
 
 ```
 URL,Plugin,Version,Severity,CVEs
 https://example.com,elementor,3.11.2,High,"CVE-2023-48777, CVE-2024-24934"
 https://example.com,wordpress-seo,19.12,Medium,"CVE-2023-40680, CVE-2024-4984, CVE-2024-4041"
 https://example.com,woocommerce,7.4.0,Medium,"CVE-2023-47777, CVE-2024-39666, CVE-2024-9944"
+```
+
+### **JSON Format**  
+
+```json
+{
+  "plugins": {
+    "contact-form-7": [
+      {
+        "severities": {
+          "medium": [
+            "CVE-2023-6449",
+            "CVE-2024-4704",
+            "CVE-2024-2242"
+          ]
+        },
+        "version": "5.4.2"
+      }
+    ],
+    "wordpress-seo": [
+      {
+        "severities": {
+          "medium": [
+            "CVE-2019-13478",
+            "CVE-2018-19370",
+            "CVE-2017-16842",
+            "CVE-2023-40680",
+            "CVE-2024-4041",
+            "CVE-2024-4984",
+            "CVE-2021-25118"
+          ]
+        },
+        "version": "4.10.8"
+      }
+    ]
+  },
+  "url": "https://example.com"
+}
 ```
 
 ---
