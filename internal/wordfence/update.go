@@ -20,8 +20,8 @@
 package wordfence
 
 import (
-	"encoding/json"
 	"fmt"
+	"github.com/goccy/go-json"
 	"net/http"
 	"os"
 	"strings"
