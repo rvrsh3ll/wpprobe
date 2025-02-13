@@ -59,9 +59,6 @@ func Execute() {
 func init() {
 	rootCmd.CompletionOptions.DisableDefaultCmd = true
 
-	rootCmd.PersistentFlags().StringP("output", "o", "", "Specify output file to save results")
-	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "Enable verbose mode")
-
 	rootCmd.AddCommand(scanCmd)
 	rootCmd.AddCommand(updateCmd)
 }
