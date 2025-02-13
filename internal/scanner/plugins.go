@@ -22,8 +22,8 @@ package scanner
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"fmt"
+	"github.com/goccy/go-json"
 	"math"
 )
 
