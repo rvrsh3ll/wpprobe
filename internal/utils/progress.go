@@ -69,19 +69,19 @@ func NewProgressBar(total int) *ProgressManager {
 func (p *ProgressManager) Increment() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.bar.Add(1)
+	_ = p.bar.Add(1)
 }
 
 func (p *ProgressManager) Finish() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.bar.Finish()
+	_ = p.bar.Finish()
 }
 
 func (p *ProgressManager) RenderBlank() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.bar.RenderBlank()
+	_ = p.bar.RenderBlank()
 }
 
 func (p *ProgressManager) Bprintln(a ...interface{}) (int, error) {

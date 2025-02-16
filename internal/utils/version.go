@@ -21,12 +21,61 @@ package utils
 
 import (
 	"fmt"
-	"github.com/Masterminds/semver"
+	"net/http"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Masterminds/semver"
+	"github.com/goccy/go-json"
 )
+
+const tagsURL = "https://api.github.com/repos/Chocapikk/wpprobe/tags"
+
+func CheckLatestVersion(currentVersion string) (string, bool) {
+	resp, err := http.Get(tagsURL)
+	if err != nil {
+		return "unknown", false
+	}
+	defer resp.Body.Close()
+
+	var tags []struct {
+		Name string `json:"name"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
+		return "unknown", false
+	}
+
+	if len(tags) == 0 {
+		return "unknown", false
+	}
+
+	var latestVersion *semver.Version
+	for _, tag := range tags {
+		tagVersionStr := strings.TrimPrefix(tag.Name, "v")
+		tagVersion, err := semver.NewVersion(tagVersionStr)
+		if err != nil {
+			continue
+		}
+
+		if latestVersion == nil || tagVersion.Compare(latestVersion) > 0 {
+			latestVersion = tagVersion
+		}
+	}
+
+	if latestVersion == nil {
+		return "unknown", false
+	}
+
+	currentSemVer, err := semver.NewVersion(strings.TrimPrefix(currentVersion, "v"))
+	if err != nil {
+		return latestVersion.String(), false
+	}
+
+	return latestVersion.String(), currentSemVer.Compare(latestVersion) >= 0
+}
 
 func GetPluginVersion(target, plugin string, threads int) string {
 	httpClient := NewHTTPClient(10 * time.Second)

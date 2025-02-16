@@ -20,13 +20,12 @@
 package scanner
 
 import (
-	"fmt"
-	"github.com/Chocapikk/wpprobe/internal/utils"
-	"github.com/Chocapikk/wpprobe/internal/wordfence"
-	"log"
 	"math"
 	"strings"
 	"sync"
+
+	"github.com/Chocapikk/wpprobe/internal/utils"
+	"github.com/Chocapikk/wpprobe/internal/wordfence"
 )
 
 type ScanOptions struct {
@@ -45,7 +44,7 @@ func ScanTargets(opts ScanOptions) {
 	if opts.File != "" {
 		lines, err := utils.ReadLines(opts.File)
 		if err != nil {
-			log.Fatalf("❌ Failed to read file: %v\n", err)
+			logger.Error("Failed to read file: " + err.Error())
 		}
 		targets = lines
 	} else {
@@ -88,10 +87,15 @@ func ScanTargets(opts ScanOptions) {
 	wg.Wait()
 }
 
-func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, progress *utils.ProgressManager) {
+func ScanSite(
+	target string,
+	opts ScanOptions,
+	writer utils.WriterInterface,
+	progress *utils.ProgressManager,
+) {
 	data, err := utils.GetEmbeddedFile("files/scanned_plugins.json")
 	if err != nil {
-		fmt.Printf("\n❌ Failed to load scanned_plugins.json: %v\n", err)
+		logger.Error("Failed to load scanned_plugins.json: " + err.Error())
 		if progress != nil {
 			progress.Increment()
 		}
@@ -100,7 +104,7 @@ func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, pro
 
 	pluginEndpoints, err := LoadPluginEndpointsFromData(data)
 	if err != nil {
-		fmt.Printf("\n❌ Failed to parse scanned_plugins.json: %v\n", err)
+		logger.Error("Failed to parse scanned_plugins.json: " + err.Error())
 		if progress != nil {
 			progress.Increment()
 		}
@@ -110,7 +114,7 @@ func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, pro
 	endpoints := FetchEndpoints(target)
 	if len(endpoints) == 0 {
 		if opts.File == "" {
-			fmt.Printf("\n❌ No REST endpoints found on %s\n", target)
+			logger.Warning("No REST endpoints found on " + target)
 		}
 		if progress != nil {
 			progress.Increment()
@@ -121,7 +125,7 @@ func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, pro
 	pluginResult := DetectPlugins(endpoints, pluginEndpoints)
 	if len(pluginResult.Detected) == 0 {
 		if opts.File == "" {
-			fmt.Printf("\n❌ No plugins detected on %s\n", target)
+			logger.Warning("No plugins detected on " + target)
 		}
 		if progress != nil {
 			progress.Increment()

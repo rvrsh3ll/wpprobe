@@ -24,10 +24,11 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
-	"github.com/goccy/go-json"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/goccy/go-json"
 )
 
 type WriterInterface interface {
@@ -50,7 +51,7 @@ type CSVWriter struct {
 func NewCSVWriter(output string) *CSVWriter {
 	file, err := os.Create(output)
 	if err != nil {
-		fmt.Printf("❌ Failed to create CSV file: %v\n", err)
+		logger.Error("Failed to create CSV file: " + err.Error())
 		return nil
 	}
 
@@ -92,7 +93,7 @@ type JSONWriter struct {
 func NewJSONWriter(output string) *JSONWriter {
 	file, err := os.Create(output)
 	if err != nil {
-		fmt.Printf("❌ Failed to create JSON file: %v\n", err)
+		logger.Error("Failed to create JSON file: " + err.Error())
 		os.Exit(1)
 	}
 
@@ -115,7 +116,9 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 		if _, exists := groupedResults[entry.Plugin][entry.Version]; !exists {
 			groupedResults[entry.Plugin][entry.Version] = make(map[string][]string)
 		}
-		groupedResults[entry.Plugin][entry.Version][entry.Severity] = append(groupedResults[entry.Plugin][entry.Version][entry.Severity], entry.CVEs...)
+		groupedResults[entry.Plugin][entry.Version][entry.Severity] = append(
+			groupedResults[entry.Plugin][entry.Version][entry.Severity],
+			entry.CVEs...)
 	}
 
 	pluginsFormatted := make(map[string][]map[string]interface{})
@@ -182,10 +185,6 @@ func DetectOutputFormat(outputFile string) string {
 	return "csv"
 }
 
-func getSupportedFormats() []string {
-	return []string{"csv", "json"}
-}
-
 func FormatVulnerabilities(vulnMap map[string][]string) string {
 	var sections []string
 	for severity, cves := range vulnMap {
@@ -197,7 +196,8 @@ func FormatVulnerabilities(vulnMap map[string][]string) string {
 func ReadLines(filename string) ([]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		return nil, fmt.Errorf("❌ Failed to open file: %v", err)
+		logger.Error("Failed to open file: " + err.Error())
+		return nil, err
 	}
 	defer file.Close()
 
@@ -208,7 +208,8 @@ func ReadLines(filename string) ([]string, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("❌ Failed to read lines: %v", err)
+		logger.Error("Failed to read lines: " + err.Error())
+		return nil, err
 	}
 
 	return lines, nil
@@ -217,13 +218,15 @@ func ReadLines(filename string) ([]string, error) {
 func GetStoragePath(filename string) (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		return "", fmt.Errorf("❌ Failed to get config directory: %v", err)
+		logger.Error("Failed to get config directory: " + err.Error())
+		return "", err
 	}
 
 	storagePath := filepath.Join(configDir, "wpprobe")
 
 	if err := os.MkdirAll(storagePath, 0755); err != nil {
-		return "", fmt.Errorf("❌ Failed to create storage directory: %v", err)
+		logger.Error("Failed to create storage directory: " + err.Error())
+		return "", err
 	}
 
 	return filepath.Join(storagePath, filename), nil

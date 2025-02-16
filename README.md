@@ -88,27 +88,38 @@ go install github.com/Chocapikk/wpprobe@latest
 
 ## 🕵️ Usage  
 
-**Update the local Wordfence DB first:**  
+**🔄 Update WPProbe**  
+Update WPProbe to the latest version:  
 ```bash
 ./wpprobe update
 ```
 
-**Basic scan for a single website:**  
+**Update the Wordfence database**  
+Update the local Wordfence vulnerability database:  
+```bash
+./wpprobe update-db
+```
+
+**Basic scan for a single website**  
+Scan a single WordPress site:  
 ```bash
 ./wpprobe scan -u https://example.com
 ```
 
-**Scan multiple targets from a file with 20 concurrent threads:**  
+**Scan multiple targets from a file with 20 concurrent threads**  
+Scan multiple sites from a `targets.txt` file using 20 threads:  
 ```bash
 ./wpprobe scan -f targets.txt -t 20
 ```
 
-**Save results to a CSV file:**  
+**Save results to a CSV file**  
+Save scan results to a CSV file:  
 ```bash
 ./wpprobe scan -f targets.txt -t 20 -o results.csv
 ```
 
-**Save results to a JSON file:**  
+**Save results to a JSON File**  
+Save scan results to a JSON file:  
 ```bash
 ./wpprobe scan -f targets.txt -t 20 -o results.json
 ```

@@ -17,21 +17,38 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package cmd
+package utils
 
 import (
-	"github.com/Chocapikk/wpprobe/internal/utils"
-	"github.com/spf13/cobra"
+	"net/http"
+	"os"
+
+	"github.com/fynelabs/selfupdate"
 )
 
-var updateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "Update WPProbe to the latest version",
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := utils.AutoUpdate(); err != nil {
-			logger.Error("Update failed: " + err.Error())
+const updateURL = "https://github.com/Chocapikk/wpprobe/releases/latest/download/wpprobe-{{.OS}}-{{.Arch}}{{.Ext}}"
+
+func AutoUpdate() error {
+	logger.Info("Downloading WPProbe update...")
+
+	resp, err := http.Get(updateURL)
+	if err != nil {
+		logger.Error("Failed to download update: " + err.Error())
+		return err
+	}
+	defer resp.Body.Close()
+
+	err = selfupdate.Apply(resp.Body, selfupdate.Options{})
+	if err != nil {
+		if rerr := selfupdate.RollbackError(err); rerr != nil {
+			logger.Error("Failed to rollback from bad update: " + rerr.Error())
 		} else {
-			logger.Success("Update completed successfully!")
+			logger.Warning("Update failed but rollback was successful.")
 		}
-	},
+		return err
+	}
+
+	logger.Success("Update successful! Restart WPProbe to use the new version.")
+	os.Exit(0)
+	return nil
 }

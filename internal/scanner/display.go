@@ -21,17 +21,17 @@ package scanner
 
 import (
 	"fmt"
+	"sort"
+	"strings"
+
 	"github.com/Chocapikk/wpprobe/internal/utils"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
-	"sort"
-	"strings"
 )
 
 var (
 	urlStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00FFFF"))
 	titleStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA500"))
-	pluginStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00BFFF"))
 	noVulnStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00FF00"))
 	noVersionStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#808080"))
 	criticalStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF0000"))
@@ -53,7 +53,14 @@ type VulnCategories struct {
 	Low      []string
 }
 
-func DisplayResults(target string, detectedPlugins map[string]string, pluginResult PluginDetectionResult, pluginVulns map[string]VulnCategories, opts ScanOptions, progress *utils.ProgressManager) {
+func DisplayResults(
+	target string,
+	detectedPlugins map[string]string,
+	pluginResult PluginDetectionResult,
+	pluginVulns map[string]VulnCategories,
+	opts ScanOptions,
+	progress *utils.ProgressManager,
+) {
 	vulnTypes := []string{"Critical", "High", "Medium", "Low"}
 	vulnStyles := []lipgloss.Style{criticalStyle, highStyle, mediumStyle, lowStyle}
 	vulnSummary := map[string]int{}
@@ -74,9 +81,16 @@ func DisplayResults(target string, detectedPlugins map[string]string, pluginResu
 
 	var summaryParts []string
 	for i, t := range vulnTypes {
-		summaryParts = append(summaryParts, fmt.Sprintf("%s: %d", vulnStyles[i].Render(t), vulnSummary[t]))
+		summaryParts = append(
+			summaryParts,
+			fmt.Sprintf("%s: %d", vulnStyles[i].Render(t), vulnSummary[t]),
+		)
 	}
-	summaryLine := fmt.Sprintf("🔎 %s (%s)", urlStyle.Render(target), strings.Join(summaryParts, " | "))
+	summaryLine := fmt.Sprintf(
+		"🔎 %s (%s)",
+		urlStyle.Render(target),
+		strings.Join(summaryParts, " | "),
+	)
 	root := tree.Root(titleStyle.Render(summaryLine))
 
 	for _, plugin := range sortedPluginsByConfidence(detectedPlugins, pluginResult.Confidence) {
@@ -112,7 +126,11 @@ func DisplayResults(target string, detectedPlugins map[string]string, pluginResu
 	}
 
 	if len(pluginResult.Ambiguity) > 0 {
-		root.Child(tree.Root("⚠️ indicates that multiple plugins share common endpoints; only one of these is likely active."))
+		root.Child(
+			tree.Root(
+				"⚠️ indicates that multiple plugins share common endpoints; only one of these is likely active.",
+			),
+		)
 	}
 
 	encapsulatedResults := separatorStyle.Render(root.String())
@@ -123,7 +141,10 @@ func DisplayResults(target string, detectedPlugins map[string]string, pluginResu
 	}
 }
 
-func sortedPluginsByConfidence(detectedPlugins map[string]string, pluginConfidence map[string]float64) []string {
+func sortedPluginsByConfidence(
+	detectedPlugins map[string]string,
+	pluginConfidence map[string]float64,
+) []string {
 	type PluginData struct {
 		name       string
 		confidence float64
