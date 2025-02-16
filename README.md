@@ -1,4 +1,4 @@
-# 🔎 WPProbe – The Stealthy WordPress Scanner  
+![WPProbe](./images/logo.jpg)
 
 **"Because why scan blind when WordPress exposes itself?"**  
 
