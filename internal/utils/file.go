@@ -23,12 +23,11 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/goccy/go-json"
 )
 
 type WriterInterface interface {

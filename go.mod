@@ -8,8 +8,8 @@ require (
 	github.com/Masterminds/semver v1.5.0
 	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/corpix/uarand v0.2.0
+	github.com/fynelabs/selfupdate v0.2.0
 	github.com/go-resty/resty/v2 v2.16.5
-	github.com/goccy/go-json v0.10.5
 	github.com/k0kubun/go-ansi v0.0.0-20180517002512-3bf9e2903213
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/spf13/cobra v1.8.1
@@ -18,7 +18,6 @@ require (
 require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/charmbracelet/x/ansi v0.4.2 // indirect
-	github.com/fynelabs/selfupdate v0.2.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

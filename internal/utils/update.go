@@ -24,8 +24,9 @@ import (
 	"net/http"
 	"os"
 
+	"encoding/json"
+
 	"github.com/fynelabs/selfupdate"
-	"github.com/goccy/go-json"
 )
 
 const githubRepo = "Chocapikk/wpprobe"

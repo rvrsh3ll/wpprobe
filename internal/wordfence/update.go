@@ -20,11 +20,12 @@
 package wordfence
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
-
-	"github.com/goccy/go-json"
+	"time"
 
 	"github.com/Chocapikk/wpprobe/internal/utils"
 )
@@ -69,7 +70,11 @@ func UpdateWordfence() error {
 }
 
 func fetchWordfenceData() (map[string]interface{}, error) {
-	resp, err := http.Get(wordfenceAPI)
+	client := &http.Client{
+		Timeout: 15 * time.Second,
+	}
+
+	resp, err := client.Get(wordfenceAPI)
 	if err != nil {
 		logger.Error("Failed to retrieve Wordfence data: " + err.Error())
 		return nil, err
@@ -77,9 +82,17 @@ func fetchWordfenceData() (map[string]interface{}, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		logger.Error("API responded with status code " + http.StatusText(resp.StatusCode))
-		return nil, err
+		logger.Error(
+			fmt.Sprintf(
+				"Wordfence API returned status: %d %s",
+				resp.StatusCode,
+				http.StatusText(resp.StatusCode),
+			),
+		)
+		return nil, fmt.Errorf("unexpected API status: %d", resp.StatusCode)
 	}
+
+	logger.Info("Decoding JSON data... This may take some time.")
 
 	var data map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
@@ -87,6 +100,7 @@ func fetchWordfenceData() (map[string]interface{}, error) {
 		return nil, err
 	}
 
+	logger.Success("Successfully retrieved and processed Wordfence data.")
 	return data, nil
 }
 

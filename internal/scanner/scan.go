@@ -55,7 +55,7 @@ func ScanTargets(opts ScanOptions) {
 
 	var progress *utils.ProgressManager
 	if opts.File != "" {
-		progress = utils.NewProgressBar(len(targets))
+		progress = utils.NewProgressBar(len(targets), "🔎 Scanning...")
 	}
 
 	var writer utils.WriterInterface

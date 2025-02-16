@@ -25,8 +25,9 @@ import (
 	"fmt"
 	"math"
 
+	"encoding/json"
+
 	"github.com/Chocapikk/wpprobe/internal/utils"
-	"github.com/goccy/go-json"
 )
 
 var logger = utils.NewLogger()

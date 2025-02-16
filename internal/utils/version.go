@@ -27,8 +27,9 @@ import (
 	"sync"
 	"time"
 
+	"encoding/json"
+
 	"github.com/Masterminds/semver"
-	"github.com/goccy/go-json"
 )
 
 const tagsURL = "https://api.github.com/repos/Chocapikk/wpprobe/tags"

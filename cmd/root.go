@@ -27,7 +27,7 @@ import (
 )
 
 var logger = utils.NewLogger()
-var version = "v0.3.0"
+var version = "v0.3.1"
 
 var rootCmd = &cobra.Command{
 	Use:     "wpprobe",
