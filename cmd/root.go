@@ -27,7 +27,7 @@ import (
 )
 
 var logger = utils.NewLogger()
-var version = "v0.3.1"
+var version = "dev"
 
 var rootCmd = &cobra.Command{
 	Use:     "wpprobe",
@@ -54,4 +54,19 @@ func init() {
 	rootCmd.AddCommand(updateDbCmd)
 
 	rootCmd.SetVersionTemplate("WPProbe version {{.Version}}\n")
+
+	rootCmd.SilenceErrors = true
+
+	cobra.OnInitialize(func() {
+		rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+			logger.Error(err.Error())
+			return err
+		})
+		rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+			if cmd.Parent() == nil {
+				logger.Error("Unknown command: " + cmd.Name())
+			}
+			return nil
+		}
+	})
 }

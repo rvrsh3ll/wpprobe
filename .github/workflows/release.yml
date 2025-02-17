@@ -11,57 +11,31 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
-
     steps:
-      - name: 🚀 Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 🔧 Set up Go
+      - name: Install Android NDK (silent)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y unzip > /dev/null
+          wget -q https://dl.google.com/android/repository/android-ndk-r25c-linux.zip -P /tmp
+          unzip -q /tmp/android-ndk-r25c-linux.zip -d /tmp
+          mv /tmp/android-ndk-r25c $HOME/android-ndk
+          echo "export ANDROID_NDK_HOME=$HOME/android-ndk" >> $GITHUB_ENV
+          echo "export PATH=$PATH:$HOME/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin" >> $GITHUB_ENV
+          
+      - name: Set up Go
         uses: actions/setup-go@v4
         with:
-          go-version: stable
+          go-version: "1.23"
 
-      - name: 📦 Install dependencies
-        run: go mod tidy
-
-      - name: 🔨 Build WPProbe for multiple OS/Architectures
-        run: |
-          set -e
-          mkdir -p dist
-          echo "🏗️ Building Linux AMD64..."
-          GOOS=linux GOARCH=amd64 go build -o dist/wpprobe-linux-amd64
-          
-          echo "🏗️ Building Linux ARM64..."
-          GOOS=linux GOARCH=arm64 go build -o dist/wpprobe-linux-arm64
-          
-          echo "🏗️ Building Windows AMD64..."
-          GOOS=windows GOARCH=amd64 go build -o dist/wpprobe-windows-amd64.exe
-          
-          echo "🏗️ Building macOS AMD64..."
-          GOOS=darwin GOARCH=amd64 go build -o dist/wpprobe-macos-amd64
-          
-          echo "🏗️ Building macOS ARM64..."
-          GOOS=darwin GOARCH=arm64 go build -o dist/wpprobe-macos-arm64
-          
-          echo "✅ Build completed successfully!"
-
-      - name: 🛠️ Make binaries executable (Linux/macOS)
-        run: chmod +x dist/wpprobe-*
-
-      - name: 🚀 Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - name: GoReleaser
+        uses: goreleaser/goreleaser-action@v4
         with:
-          tag_name: ${{ github.ref_name }}
-          name: "WPProbe ${{ github.ref_name }}"
-          draft: false
-          prerelease: false
-          files: |
-            dist/wpprobe-linux-amd64
-            dist/wpprobe-linux-arm64
-            dist/wpprobe-windows-amd64.exe
-            dist/wpprobe-macos-amd64
-            dist/wpprobe-macos-arm64
+          version: latest
+          args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -20,13 +20,12 @@
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
-
-	"encoding/json"
-
-	"github.com/fynelabs/selfupdate"
+	"runtime"
 )
 
 const githubRepo = "Chocapikk/wpprobe"
@@ -35,19 +34,24 @@ func GitHubLatestReleaseURL() string {
 	return fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", githubRepo)
 }
 
-func GitHubDownloadURL(version, os, arch string) string {
+func GitHubDownloadURL(version, osName, arch string) string {
+	var ext string
+	if osName == "windows" {
+		ext = ".exe"
+	}
 	return fmt.Sprintf(
-		"https://github.com/%s/releases/download/%s/wpprobe-%s-%s",
+		"https://github.com/%s/releases/download/%s/wpprobe_%s_%s_%s%s",
 		githubRepo,
 		version,
-		os,
+		version,
+		osName,
 		arch,
+		ext,
 	)
 }
 
 func getLatestVersion() (string, error) {
 	logger.Info("Fetching latest WPProbe version...")
-
 	resp, err := http.Get(GitHubLatestReleaseURL())
 	if err != nil {
 		logger.Error("Failed to fetch latest release: " + err.Error())
@@ -89,7 +93,6 @@ func AutoUpdate() error {
 	updateURL := GitHubDownloadURL(version, osName, arch)
 
 	logger.Info("Downloading WPProbe update from: " + updateURL)
-
 	resp, err := http.Get(updateURL)
 	if err != nil {
 		logger.Error("Failed to download update: " + err.Error())
@@ -97,30 +100,40 @@ func AutoUpdate() error {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		logger.Error(fmt.Sprintf("Failed to download update, status: %d", resp.StatusCode))
-		return fmt.Errorf("failed to download update, status: %d", resp.StatusCode)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Error("Failed to read update response: " + err.Error())
+		return err
 	}
 
-	executable, err := os.Executable()
+	if resp.StatusCode != http.StatusOK || string(body) == "Not Found" {
+		logger.Error("Update not found: " + updateURL)
+		return fmt.Errorf("update not found at %s", updateURL)
+	}
+
+	currentExe, err := os.Executable()
 	if err != nil {
 		logger.Error("Failed to determine executable path: " + err.Error())
 		return err
 	}
 
-	logger.Info("Replacing current binary: " + executable)
+	logger.Info("Replacing current binary: " + currentExe)
 
-	err = selfupdate.Apply(resp.Body, selfupdate.Options{
-		TargetPath: executable,
-	})
-	if err != nil {
-		logger.Error("Failed to update WPProbe: " + err.Error())
+	tmpFile := currentExe + ".tmp"
 
-		if rerr := selfupdate.RollbackError(err); rerr != nil {
-			logger.Error("Failed to rollback after failed update: " + rerr.Error())
-		} else {
-			logger.Warning("Update failed but rollback was successful.")
+	if err := os.WriteFile(tmpFile, body, 0o755); err != nil {
+		logger.Error("Failed to write temp file: " + err.Error())
+		return err
+	}
+
+	if runtime.GOOS == "windows" {
+		if err := os.Remove(currentExe); err != nil {
+			logger.Warning("Failed removing current file (Windows lock issues?). " + err.Error())
 		}
+	}
+
+	if err := os.Rename(tmpFile, currentExe); err != nil {
+		logger.Error("Failed to replace old binary: " + err.Error())
 		return err
 	}
 
@@ -130,21 +143,9 @@ func AutoUpdate() error {
 }
 
 func detectOS() string {
-	switch os := os.Getenv("GOOS"); os {
-	case "windows":
-		return "windows"
-	case "darwin":
-		return "macos"
-	default:
-		return "linux"
-	}
+	return runtime.GOOS
 }
 
 func detectArch() string {
-	switch arch := os.Getenv("GOARCH"); arch {
-	case "arm64":
-		return "arm64"
-	default:
-		return "amd64"
-	}
+	return runtime.GOARCH
 }
