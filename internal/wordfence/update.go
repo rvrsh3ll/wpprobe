@@ -35,7 +35,7 @@ var logger = utils.NewLogger()
 const wordfenceAPI = "https://www.wordfence.com/api/intelligence/v2/vulnerabilities/production"
 
 type Vulnerability struct {
-	ID              string `json:"id"`
+	Title           string `json:"title"`
 	Slug            string `json:"slug"`
 	SoftwareType    string `json:"type"`
 	AffectedVersion string `json:"affected_version"`
@@ -46,6 +46,7 @@ type Vulnerability struct {
 	Severity        string `json:"severity"`
 	CVE             string `json:"cve"`
 	CVELink         string `json:"cve_link"`
+	AuthType        string `json:"authType"`
 }
 
 func UpdateWordfence() error {
@@ -116,10 +117,19 @@ func handleFetchError(err error) {
 func processWordfenceData(wfData map[string]interface{}) []Vulnerability {
 	var vulnerabilities []Vulnerability
 
-	for vulnID, vulnerability := range wfData {
+	for _, vulnerability := range wfData {
 		vulnMap, ok := vulnerability.(map[string]interface{})
 		if !ok {
 			continue
+		}
+
+		title, _ := vulnMap["title"].(string)
+		authType := "Unknown"
+		lowerTitle := strings.ToLower(title)
+		if strings.Contains(lowerTitle, "unauth") {
+			authType = "Unauth"
+		} else if strings.Contains(lowerTitle, "auth") {
+			authType = "Auth"
 		}
 
 		for _, software := range vulnMap["software"].([]interface{}) {
@@ -160,7 +170,7 @@ func processWordfenceData(wfData map[string]interface{}) []Vulnerability {
 				)
 
 				vuln := Vulnerability{
-					ID:              vulnID,
+					Title:           title,
 					Slug:            slug,
 					SoftwareType:    softwareType,
 					AffectedVersion: versionLabel,
@@ -171,8 +181,9 @@ func processWordfenceData(wfData map[string]interface{}) []Vulnerability {
 					Severity: strings.ToLower(
 						vulnMap["cvss"].(map[string]interface{})["rating"].(string),
 					),
-					CVE:     cve,
-					CVELink: cveLink,
+					CVE:      cve,
+					CVELink:  cveLink,
+					AuthType: authType,
 				}
 
 				vulnerabilities = append(vulnerabilities, vuln)

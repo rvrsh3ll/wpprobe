@@ -21,235 +21,148 @@ package scanner
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/Chocapikk/wpprobe/internal/utils"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/tree"
 )
 
-func TestDisplayResults(t *testing.T) {
-	type args struct {
-		target          string
-		detectedPlugins map[string]string
-		pluginResult    PluginDetectionResult
-		resultsList     []utils.PluginEntry
-		opts            ScanOptions
-		progress        *utils.ProgressManager
+func Test_buildPluginVulns(t *testing.T) {
+	entries := []utils.PluginEntry{
+		{Plugin: "plugin1", Severity: "critical", CVEs: []string{"CVE-1"}},
+		{Plugin: "plugin1", Severity: "high", CVEs: []string{"CVE-2"}},
+		{Plugin: "plugin2", Severity: "medium", CVEs: []string{"CVE-3"}},
 	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "BasicDisplay",
-			args: args{
-				target: "http://example.com",
-				detectedPlugins: map[string]string{
-					"example-plugin": "1.0",
-				},
-				pluginResult: PluginDetectionResult{
-					Confidence: map[string]float64{"example-plugin": 90.0},
-					Ambiguity:  map[string]bool{"example-plugin": false},
-				},
-				resultsList: []utils.PluginEntry{
-					{
-						Plugin:   "example-plugin",
-						Version:  "1.0",
-						Severity: "high",
-						CVEs:     []string{"CVE-2023-1234"},
-					},
-				},
-			},
+	got := buildPluginVulns(entries)
+	want := map[string]VulnCategories{
+		"plugin1": {
+			Critical: []string{"CVE-1"},
+			High:     []string{"CVE-2"},
+		},
+		"plugin2": {
+			Medium: []string{"CVE-3"},
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			DisplayResults(
-				tt.args.target,
-				tt.args.detectedPlugins,
-				tt.args.pluginResult,
-				tt.args.resultsList,
-				tt.args.opts,
-				tt.args.progress,
-			)
-		})
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("buildPluginVulns() = %v, want %v", got, want)
 	}
 }
 
-func Test_appendVuln(t *testing.T) {
-	type args struct {
-		categories *VulnCategories
-		severity   string
-		cves       []string
+func Test_buildPluginAuthGroups(t *testing.T) {
+	entries := []utils.PluginEntry{
+		{Plugin: "plugin1", Severity: "critical", CVEs: []string{"CVE-1"}, AuthType: "Unauth"},
+		{Plugin: "plugin1", Severity: "critical", CVEs: []string{"CVE-2"}, AuthType: "Auth"},
+		{Plugin: "plugin1", Severity: "high", CVEs: []string{"CVE-3"}, AuthType: "Unknown"},
 	}
-	tests := []struct {
-		name string
-		args args
-		want VulnCategories
-	}{
-		{
-			name: "AddCritical",
-			args: args{
-				categories: &VulnCategories{},
-				severity:   "Critical",
-				cves:       []string{"CVE-2023-1111"},
+	got := buildPluginAuthGroups(entries)
+	want := map[string]map[string]map[string][]string{
+		"plugin1": {
+			"Critical": {
+				"unauth": {"CVE-1"},
+				"auth":   {"CVE-2"},
 			},
-			want: VulnCategories{
-				Critical: []string{"CVE-2023-1111"},
+			"High": {
+				"unknown": {"CVE-3"},
 			},
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			appendVuln(tt.args.categories, tt.args.severity, tt.args.cves)
-			if !reflect.DeepEqual(*tt.args.categories, tt.want) {
-				t.Errorf("appendVuln() = %v, want %v", *tt.args.categories, tt.want)
-			}
-		})
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("buildPluginAuthGroups() = %v, want %v", got, want)
+	}
+}
+
+func Test_buildSummaryLine(t *testing.T) {
+	pluginVulns := map[string]VulnCategories{
+		"plugin1": {
+			Critical: []string{"CVE-1"},
+			High:     []string{"CVE-2", "CVE-3"},
+		},
+		"plugin2": {
+			Medium: []string{"CVE-4"},
+		},
+	}
+	vulnTypes := []string{"Critical", "High", "Medium", "Low"}
+	vulnStyles := map[string]lipgloss.Style{
+		"Critical": lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("red")),
+		"High":     lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("yellow")),
+		"Medium":   lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("blue")),
+		"Low":      lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("green")),
+	}
+	line := buildSummaryLine("http://example.com", pluginVulns, vulnTypes, vulnStyles)
+	if !strings.Contains(line, "Critical: 1") || !strings.Contains(line, "High: 2") ||
+		!strings.Contains(line, "Medium: 1") {
+		t.Errorf("buildSummaryLine() = %v, unexpected summary", line)
+	}
+}
+
+func Test_sortedPluginsByConfidence(t *testing.T) {
+	argsDetected := map[string]string{
+		"pluginA": "1.0",
+		"pluginB": "unknown",
+		"pluginC": "2.0",
+	}
+	argsConfidence := map[string]float64{
+		"pluginA": 90.0,
+		"pluginB": 60.0,
+		"pluginC": 80.0,
+	}
+	argsVulns := map[string]VulnCategories{
+		"pluginA": {Critical: []string{"CVE-2023-1111"}},
+		"pluginB": {},
+		"pluginC": {High: []string{"CVE-2022-5678"}},
+	}
+
+	got := sortedPluginsByConfidence(argsDetected, argsConfidence, argsVulns)
+	want := []string{"pluginB", "pluginA", "pluginC"}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("sortedPluginsByConfidence() = %v, want %v", got, want)
 	}
 }
 
 func Test_formatPluginLabel(t *testing.T) {
-	type args struct {
+	tests := []struct {
+		name       string
 		plugin     string
 		version    string
 		confidence float64
 		ambiguous  bool
-	}
-	tests := []struct {
-		name string
-		args args
-		want string
+		want       string
 	}{
+		{"KnownVersion", "plugin", "1.0", 90.0, false, "plugin (1.0)"},
 		{
-			name: "KnownVersion",
-			args: args{"plugin", "1.0", 90.0, false},
-			want: "plugin (1.0)",
+			"UnknownVersion",
+			"plugin",
+			"unknown",
+			75.0,
+			false,
+			"plugin (unknown) [75.00% confidence]",
 		},
-		{
-			name: "UnknownVersion",
-			args: args{"plugin", "unknown", 75.0, false},
-			want: "plugin (unknown) [75.00% confidence]",
-		},
-		{
-			name: "Ambiguous",
-			args: args{"plugin", "1.0", 90.0, true},
-			want: "plugin (1.0) ⚠️",
-		},
+		{"Ambiguous", "plugin", "1.0", 90.0, true, "plugin (1.0) ⚠️"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := formatPluginLabel(tt.args.plugin, tt.args.version, tt.args.confidence, tt.args.ambiguous); got != tt.want {
+			if got := formatPluginLabel(tt.plugin, tt.version, tt.confidence, tt.ambiguous); got != tt.want {
 				t.Errorf("formatPluginLabel() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func Test_addAllVulnNodes(t *testing.T) {
-	type args struct {
-		pluginNode     *tree.Tree
-		vulnCategories VulnCategories
-		vulnStyles     map[string]lipgloss.Style
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "AddVulnNodes",
-			args: args{
-				pluginNode: tree.Root("plugin"),
-				vulnCategories: VulnCategories{
-					Critical: []string{"CVE-2023-1111"},
-					High:     []string{"CVE-2023-2222"},
-				},
-				vulnStyles: map[string]lipgloss.Style{
-					"Critical": lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("9")),
-					"High":     lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11")),
-				},
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			addAllVulnNodes(tt.args.pluginNode, tt.args.vulnCategories, tt.args.vulnStyles)
-		})
-	}
-}
-
-func Test_sortedPluginsByConfidence(t *testing.T) {
-	type args struct {
-		detectedPlugins  map[string]string
-		pluginConfidence map[string]float64
-	}
-	tests := []struct {
-		name string
-		args args
-		want []string
-	}{
-		{
-			name: "SortByConfidence",
-			args: args{
-				detectedPlugins: map[string]string{
-					"pluginA": "1.0",
-					"pluginB": "unknown",
-					"pluginC": "2.0",
-				},
-				pluginConfidence: map[string]float64{
-					"pluginA": 90.0,
-					"pluginB": 60.0,
-					"pluginC": 80.0,
-				},
-			},
-			want: []string{"pluginB", "pluginA", "pluginC"},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := sortedPluginsByConfidence(tt.args.detectedPlugins, tt.args.pluginConfidence); !reflect.DeepEqual(
-				got,
-				tt.want,
-			) {
-				t.Errorf("sortedPluginsByConfidence() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func Test_getPluginColor(t *testing.T) {
-	type args struct {
+	tests := []struct {
+		name           string
 		version        string
 		vulnCategories VulnCategories
-	}
-	tests := []struct {
-		name string
-		args args
-		want lipgloss.Style
+		want           lipgloss.Style
 	}{
-		{
-			name: "CriticalVuln",
-			args: args{
-				version: "1.0",
-				vulnCategories: VulnCategories{
-					Critical: []string{"CVE-2023-1111"},
-				},
-			},
-			want: criticalStyle,
-		},
-		{
-			name: "NoVuln",
-			args: args{
-				version:        "1.0",
-				vulnCategories: VulnCategories{},
-			},
-			want: noVulnStyle,
-		},
+		{"CriticalVuln", "1.0", VulnCategories{Critical: []string{"CVE-2023-1111"}}, criticalStyle},
+		{"NoVuln", "1.0", VulnCategories{}, noVulnStyle},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := getPluginColor(tt.args.version, tt.args.vulnCategories)
+			got := getPluginColor(tt.version, tt.vulnCategories)
 			if got.Render("test") != tt.want.Render("test") {
 				t.Errorf(
 					"getPluginColor() = %v, want %v",
@@ -257,69 +170,6 @@ func Test_getPluginColor(t *testing.T) {
 					tt.want.Render("test"),
 				)
 			}
-		})
-	}
-}
-
-func Test_cveCompare(t *testing.T) {
-	type args struct {
-		cve1 string
-		cve2 string
-	}
-	tests := []struct {
-		name string
-		args args
-		want bool
-	}{
-		{
-			name: "OlderYear",
-			args: args{"CVE-2020-1234", "CVE-2023-1234"},
-			want: true,
-		},
-		{
-			name: "SameYearLowerID",
-			args: args{"CVE-2023-1234", "CVE-2023-5678"},
-			want: true,
-		},
-		{
-			name: "SameYearHigherID",
-			args: args{"CVE-2023-9999", "CVE-2023-1234"},
-			want: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := cveCompare(tt.args.cve1, tt.args.cve2); got != tt.want {
-				t.Errorf("cveCompare() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_addVulnNode(t *testing.T) {
-	type args struct {
-		parent   *tree.Tree
-		severity string
-		vulns    []string
-		style    lipgloss.Style
-	}
-	tests := []struct {
-		name string
-		args args
-	}{
-		{
-			name: "AddVulnNode",
-			args: args{
-				parent:   tree.Root("Plugin"),
-				severity: "Critical",
-				vulns:    []string{"CVE-2023-1234", "CVE-2023-5678"},
-				style:    lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("9")),
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			addVulnNode(tt.args.parent, tt.args.severity, tt.args.vulns, tt.args.style)
 		})
 	}
 }

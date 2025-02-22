@@ -27,7 +27,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type WriterInterface interface {
@@ -40,7 +44,25 @@ type PluginEntry struct {
 	Version  string   `json:"version"`
 	Severity string   `json:"severity"`
 	CVEs     []string `json:"cves"`
+	Title    string   `json:"title"`
+	AuthType string   `json:"authType"`
 }
+
+func authTypeOrder(auth string) int {
+	a := strings.ToLower(auth)
+	switch a {
+	case "unauth":
+		return 0
+	case "auth":
+		return 1
+	default:
+		return 2
+	}
+}
+
+//////////////////////////////
+// CSV Writer Implementation
+//////////////////////////////
 
 type CSVWriter struct {
 	file   *os.File
@@ -55,7 +77,7 @@ func NewCSVWriter(output string) *CSVWriter {
 	}
 
 	writer := csv.NewWriter(file)
-	header := []string{"URL", "Plugin", "Version", "Severity", "CVEs"}
+	header := []string{"URL", "Plugin", "Version", "Severity", "AuthType", "CVEs", "Title"}
 	_ = writer.Write(header)
 	writer.Flush()
 
@@ -63,13 +85,18 @@ func NewCSVWriter(output string) *CSVWriter {
 }
 
 func (c *CSVWriter) WriteResults(url string, results []PluginEntry) {
+	sort.Slice(results, func(i, j int) bool {
+		return authTypeOrder(results[i].AuthType) < authTypeOrder(results[j].AuthType)
+	})
 	for _, entry := range results {
 		row := []string{
 			url,
 			entry.Plugin,
 			entry.Version,
 			entry.Severity,
+			entry.AuthType,
 			strings.Join(entry.CVEs, ", "),
+			entry.Title,
 		}
 		_ = c.writer.Write(row)
 	}
@@ -82,6 +109,10 @@ func (c *CSVWriter) Close() {
 		_ = c.file.Close()
 	}
 }
+
+//////////////////////////////
+// JSON Writer Implementation
+//////////////////////////////
 
 type JSONWriter struct {
 	file    *os.File
@@ -106,42 +137,66 @@ func NewJSONWriter(output string) *JSONWriter {
 }
 
 func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
-	groupedResults := make(map[string]map[string]map[string][]string)
-
+	groupedResults := make(map[string]map[string]map[string]map[string][]string)
 	for _, entry := range results {
-		if _, exists := groupedResults[entry.Plugin]; !exists {
-			groupedResults[entry.Plugin] = make(map[string]map[string][]string)
+		plugin := entry.Plugin
+		version := entry.Version
+		severity := entry.Severity
+		auth := strings.ToLower(entry.AuthType)
+		if auth != "auth" && auth != "unauth" {
+			auth = "unknown"
 		}
-		if _, exists := groupedResults[entry.Plugin][entry.Version]; !exists {
-			groupedResults[entry.Plugin][entry.Version] = make(map[string][]string)
+
+		if _, ok := groupedResults[plugin]; !ok {
+			groupedResults[plugin] = make(map[string]map[string]map[string][]string)
 		}
-		groupedResults[entry.Plugin][entry.Version][entry.Severity] = append(
-			groupedResults[entry.Plugin][entry.Version][entry.Severity],
-			entry.CVEs...)
+		if _, ok := groupedResults[plugin][version]; !ok {
+			groupedResults[plugin][version] = make(map[string]map[string][]string)
+		}
+		if _, ok := groupedResults[plugin][version][severity]; !ok {
+			groupedResults[plugin][version][severity] = make(map[string][]string)
+		}
+		groupedResults[plugin][version][severity][auth] =
+			append(groupedResults[plugin][version][severity][auth], entry.CVEs...)
 	}
 
 	pluginsFormatted := make(map[string][]map[string]interface{})
-
+	desiredAuthOrder := []string{"unauth", "auth", "unknown"}
 	for plugin, versions := range groupedResults {
 		for version, severities := range versions {
+			formattedSeverities := make(map[string]interface{})
+			for severity, authMap := range severities {
+				ordered := make([]map[string]interface{}, 0)
+				for _, a := range desiredAuthOrder {
+					if cves, ok := authMap[a]; ok && len(cves) > 0 {
+						ordered = append(ordered, map[string]interface{}{
+							"authType": cases.Title(language.Und).String(a),
+							"cves":     cves,
+						})
+					}
+				}
+				formattedSeverities[severity] = ordered
+			}
 			pluginsFormatted[plugin] = append(pluginsFormatted[plugin], map[string]interface{}{
 				"version":    version,
-				"severities": severities,
+				"severities": formattedSeverities,
 			})
 		}
 	}
 
-	entry := map[string]interface{}{
+	outputEntry := map[string]interface{}{
 		"url":     url,
 		"plugins": pluginsFormatted,
 	}
 
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
-	_ = encoder.Encode(entry)
+	_ = encoder.Encode(outputEntry)
 
 	data := buffer.Bytes()
-	data = data[:len(data)-1]
+	if len(data) > 0 {
+		data = data[:len(data)-1]
+	}
 
 	if !j.first {
 		_, _ = j.file.WriteString("\n")
@@ -155,33 +210,29 @@ func (j *JSONWriter) Close() {
 	_ = j.file.Close()
 }
 
+func DetectOutputFormat(outputFile string) string {
+	if outputFile == "" {
+		return "csv"
+	}
+	ext := strings.TrimPrefix(filepath.Ext(outputFile), ".")
+	supported := []string{"csv", "json"}
+	for _, format := range supported {
+		if ext == format {
+			return format
+		}
+	}
+	fmt.Printf("⚠️ Unsupported output format: %s. Supported: csv, json. Defaulting to CSV.\n", ext)
+	return "csv"
+}
+
 func GetWriter(outputFile string) WriterInterface {
 	format := DetectOutputFormat(outputFile)
-
 	switch format {
 	case "json":
 		return NewJSONWriter(outputFile)
 	default:
 		return NewCSVWriter(outputFile)
 	}
-}
-
-func DetectOutputFormat(outputFile string) string {
-	if outputFile == "" {
-		return "csv"
-	}
-
-	ext := strings.TrimPrefix(filepath.Ext(outputFile), ".")
-	supported := []string{"csv", "json"}
-
-	for _, format := range supported {
-		if ext == format {
-			return format
-		}
-	}
-
-	fmt.Printf("⚠️ Unsupported output format: %s. Supported: csv, json. Defaulting to CSV.\n", ext)
-	return "csv"
 }
 
 func FormatVulnerabilities(vulnMap map[string][]string) string {
@@ -199,18 +250,15 @@ func ReadLines(filename string) ([]string, error) {
 		return nil, err
 	}
 	defer file.Close()
-
 	var lines []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
-
 	if err := scanner.Err(); err != nil {
 		logger.Error("Failed to read lines: " + err.Error())
 		return nil, err
 	}
-
 	return lines, nil
 }
 
@@ -220,13 +268,10 @@ func GetStoragePath(filename string) (string, error) {
 		logger.Error("Failed to get config directory: " + err.Error())
 		return "", err
 	}
-
 	storagePath := filepath.Join(configDir, "wpprobe")
-
 	if err := os.MkdirAll(storagePath, 0755); err != nil {
 		logger.Error("Failed to create storage directory: " + err.Error())
 		return "", err
 	}
-
 	return filepath.Join(storagePath, filename), nil
 }

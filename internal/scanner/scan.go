@@ -71,17 +71,13 @@ func ScanTargets(opts ScanOptions) {
 	for _, target := range targets {
 		wg.Add(1)
 		sem <- struct{}{}
-
 		go func(t string, scanThreads int) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			defer func() { _ = recover() }()
-
 			localOpts := opts
 			localOpts.Threads = scanThreads
-
 			ScanSite(t, localOpts, writer, progress)
-
 			if progress != nil {
 				mu.Lock()
 				progress.Increment()
@@ -91,7 +87,6 @@ func ScanTargets(opts ScanOptions) {
 	}
 
 	wg.Wait()
-
 	if progress != nil {
 		progress.Finish()
 	}
@@ -140,13 +135,14 @@ func ScanSite(
 		if progress != nil {
 			progress.Increment()
 		}
+		if writer != nil {
+			writer.WriteResults(target, []utils.PluginEntry{})
+		}
 		return
 	}
 
 	results := make(map[string]string)
-	pluginVulns := make(map[string]VulnCategories)
 	var resultsList []utils.PluginEntry
-
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	sem := make(chan struct{}, opts.Threads)
@@ -154,45 +150,45 @@ func ScanSite(
 	for _, plugin := range pluginResult.Detected {
 		wg.Add(1)
 		sem <- struct{}{}
-
 		go func(plugin string) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			defer func() { _ = recover() }()
-
 			var localResultsList []utils.PluginEntry
 			version := "unknown"
-
 			if !opts.NoCheckVersion {
 				version = utils.GetPluginVersion(target, plugin, opts.Threads)
 			}
 
 			vulns := wordfence.GetVulnerabilitiesForPlugin(plugin, version)
-			if vulns == nil {
-				return
-			}
-
-			for _, v := range vulns {
+			if len(vulns) == 0 {
 				localResultsList = append(localResultsList, utils.PluginEntry{
 					Plugin:   plugin,
 					Version:  version,
-					Severity: v.Severity,
-					CVEs:     []string{v.CVE},
+					Severity: "None",
+					CVEs:     []string{},
+					Title:    "No vulnerabilities found",
+					AuthType: "N/A",
 				})
+			} else {
+				for _, v := range vulns {
+					localResultsList = append(localResultsList, utils.PluginEntry{
+						Plugin:   plugin,
+						Version:  version,
+						Severity: v.Severity,
+						CVEs:     []string{v.CVE},
+						Title:    v.Title,
+						AuthType: v.AuthType,
+					})
+				}
 			}
 
 			mu.Lock()
 			results[plugin] = version
-			pluginVulns[plugin] = VulnCategories{}
 			resultsList = append(resultsList, localResultsList...)
-
-			if writer != nil {
-				writer.WriteResults(plugin, localResultsList)
-			}
 			mu.Unlock()
 		}(plugin)
 	}
-
 	wg.Wait()
 
 	if progress != nil {

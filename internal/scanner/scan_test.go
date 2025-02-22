@@ -61,7 +61,7 @@ func TestScanSite(t *testing.T) {
 	getVulnerabilitiesForPlugin := func(plugin, version string) []wordfence.Vulnerability {
 		return []wordfence.Vulnerability{
 			{
-				ID:           "vuln1",
+				Title:        "Test Vulnerability Title",
 				Slug:         "test-plugin",
 				SoftwareType: "plugin",
 				CVE:          "CVE-2024-0001",

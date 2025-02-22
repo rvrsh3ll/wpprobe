@@ -45,6 +45,7 @@ func TestUpdateWordfence(t *testing.T) {
 func Test_processWordfenceData(t *testing.T) {
 	mockData := map[string]interface{}{
 		"vuln1": map[string]interface{}{
+			"title":    "Unauthenticated ZBEUB",
 			"cve":      "CVE-2024-0001",
 			"cve_link": "https://example.com/cve/CVE-2024-0001",
 			"cvss": map[string]interface{}{
@@ -69,7 +70,7 @@ func Test_processWordfenceData(t *testing.T) {
 
 	want := []Vulnerability{
 		{
-			ID:              "vuln1",
+			Title:           "Unauthenticated ZBEUB",
 			Slug:            "test-plugin",
 			SoftwareType:    "plugin",
 			AffectedVersion: "1.0.0 - 2.0.0",
@@ -80,10 +81,12 @@ func Test_processWordfenceData(t *testing.T) {
 			Severity:        "high",
 			CVE:             "CVE-2024-0001",
 			CVELink:         "https://example.com/cve/CVE-2024-0001",
+			AuthType:        "Unauth",
 		},
 	}
 
 	got := processWordfenceData(mockData)
+
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("processWordfenceData() = %v, want %v", got, want)
 	}
@@ -92,7 +95,7 @@ func Test_processWordfenceData(t *testing.T) {
 func Test_saveVulnerabilitiesToFile(t *testing.T) {
 	vulnerabilities := []Vulnerability{
 		{
-			ID:           "vuln1",
+			Title:        "Test Vulnerability Title",
 			Slug:         "test-plugin",
 			SoftwareType: "plugin",
 			CVE:          "CVE-2024-0001",
@@ -115,7 +118,7 @@ func Test_saveVulnerabilitiesToFile(t *testing.T) {
 func Test_loadVulnerabilities(t *testing.T) {
 	vulnerabilities := []Vulnerability{
 		{
-			ID:           "vuln1",
+			Title:        "Test Vulnerability Title",
 			Slug:         "test-plugin",
 			SoftwareType: "plugin",
 			CVE:          "CVE-2024-0001",
@@ -147,7 +150,7 @@ func Test_loadVulnerabilities(t *testing.T) {
 	}
 
 	for i, vuln := range vulnerabilities {
-		if vuln != loadedVulns[i] {
+		if !reflect.DeepEqual(vuln, loadedVulns[i]) {
 			t.Errorf("Mismatch at index %d: got %+v, want %+v", i, loadedVulns[i], vuln)
 		}
 	}
@@ -156,7 +159,7 @@ func Test_loadVulnerabilities(t *testing.T) {
 func TestGetVulnerabilitiesForPlugin(t *testing.T) {
 	vulnerabilities := []Vulnerability{
 		{
-			ID:           "vuln1",
+			Title:        "Test Vulnerability Title",
 			Slug:         "test-plugin",
 			SoftwareType: "plugin",
 			FromVersion:  "1.0.0",
