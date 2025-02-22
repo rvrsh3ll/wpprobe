@@ -65,6 +65,7 @@ func (h *HTTPClientManager) Get(url string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
 	if resp == nil || resp.RawBody() == nil {
 		return "", errors.New("empty response")
 	}
@@ -74,6 +75,10 @@ func (h *HTTPClientManager) Get(url string) (string, error) {
 	data, err := io.ReadAll(limited)
 	if err != nil {
 		return "", err
+	}
+
+	if len(data) == 0 {
+		return "", errors.New("empty response")
 	}
 
 	if len(data) >= maxResponseSize {

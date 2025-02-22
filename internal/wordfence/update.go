@@ -50,9 +50,10 @@ type Vulnerability struct {
 
 func UpdateWordfence() error {
 	logger.Info("Fetching Wordfence data...")
+
 	data, err := fetchWordfenceData()
 	if err != nil {
-		logger.Error("Failed to retrieve Wordfence data: " + err.Error())
+		handleFetchError(err)
 		return err
 	}
 
@@ -70,38 +71,46 @@ func UpdateWordfence() error {
 }
 
 func fetchWordfenceData() (map[string]interface{}, error) {
-	client := &http.Client{
-		Timeout: 15 * time.Second,
-	}
-
+	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Get(wordfenceAPI)
 	if err != nil {
-		logger.Error("Failed to retrieve Wordfence data: " + err.Error())
-		return nil, err
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		logger.Error(
-			fmt.Sprintf(
-				"Wordfence API returned status: %d %s",
-				resp.StatusCode,
-				http.StatusText(resp.StatusCode),
-			),
+	switch resp.StatusCode {
+	case http.StatusOK:
+		logger.Info("Decoding JSON data... This may take some time.")
+		var data map[string]interface{}
+		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+			return nil, fmt.Errorf("JSON decoding error: %w", err)
+		}
+		logger.Success("Successfully retrieved and processed Wordfence data.")
+		return data, nil
+
+	case http.StatusTooManyRequests:
+		retryAfter := resp.Header.Get("Retry-After")
+		if retryAfter == "" {
+			retryAfter = "a few minutes"
+		}
+		return nil, fmt.Errorf("rate limit exceeded (429). Retry after %s", retryAfter)
+
+	default:
+		return nil, fmt.Errorf(
+			"unexpected API status: %d %s",
+			resp.StatusCode,
+			http.StatusText(resp.StatusCode),
 		)
-		return nil, fmt.Errorf("unexpected API status: %d", resp.StatusCode)
 	}
+}
 
-	logger.Info("Decoding JSON data... This may take some time.")
-
-	var data map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
-		logger.Error("JSON decoding error: " + err.Error())
-		return nil, err
+func handleFetchError(err error) {
+	switch {
+	case strings.Contains(err.Error(), "429"):
+		logger.Warning("Wordfence API rate limit hit (429). Please wait before retrying.")
+	default:
+		logger.Error("Failed to retrieve Wordfence data: " + err.Error())
 	}
-
-	logger.Success("Successfully retrieved and processed Wordfence data.")
-	return data, nil
 }
 
 func processWordfenceData(wfData map[string]interface{}) []Vulnerability {

@@ -6,6 +6,8 @@
 
 ![WPProbe](./images/wpprobe.png)
 
+[![Go CI](https://github.com/Chocapikk/wpprobe/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/Chocapikk/wpprobe/actions/workflows/go.yml)
+
 ## 🧐 What is WPProbe?  
 
 **WPProbe** is a **fast and efficient WordPress plugin scanner** that leverages **REST API enumeration (`?rest_route`)** to detect installed plugins **without brute-force**.  

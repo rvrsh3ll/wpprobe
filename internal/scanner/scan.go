@@ -21,7 +21,6 @@ package scanner
 
 import (
 	"math"
-	"strings"
 	"sync"
 
 	"github.com/Chocapikk/wpprobe/internal/utils"
@@ -45,6 +44,7 @@ func ScanTargets(opts ScanOptions) {
 		lines, err := utils.ReadLines(opts.File)
 		if err != nil {
 			logger.Error("Failed to read file: " + err.Error())
+			return
 		}
 		targets = lines
 	} else {
@@ -65,6 +65,7 @@ func ScanTargets(opts ScanOptions) {
 	}
 
 	var wg sync.WaitGroup
+	var mu sync.RWMutex
 	sem := make(chan struct{}, opts.Threads)
 
 	for _, target := range targets {
@@ -74,17 +75,26 @@ func ScanTargets(opts ScanOptions) {
 		go func(t string, scanThreads int) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			defer func() {
-				_ = recover()
-			}()
+			defer func() { _ = recover() }()
 
 			localOpts := opts
 			localOpts.Threads = scanThreads
+
 			ScanSite(t, localOpts, writer, progress)
+
+			if progress != nil {
+				mu.Lock()
+				progress.Increment()
+				mu.Unlock()
+			}
 		}(target, siteThreads)
 	}
 
 	wg.Wait()
+
+	if progress != nil {
+		progress.Finish()
+	}
 }
 
 func ScanSite(
@@ -135,7 +145,6 @@ func ScanSite(
 
 	results := make(map[string]string)
 	pluginVulns := make(map[string]VulnCategories)
-	pluginVersions := make(map[string]string)
 	var resultsList []utils.PluginEntry
 
 	var wg sync.WaitGroup
@@ -149,11 +158,11 @@ func ScanSite(
 		go func(plugin string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			defer func() {
-				_ = recover()
-			}()
+			defer func() { _ = recover() }()
 
+			var localResultsList []utils.PluginEntry
 			version := "unknown"
+
 			if !opts.NoCheckVersion {
 				version = utils.GetPluginVersion(target, plugin, opts.Threads)
 			}
@@ -163,31 +172,23 @@ func ScanSite(
 				return
 			}
 
-			vulnCategories := VulnCategories{}
-
-			mu.Lock()
 			for _, v := range vulns {
-				switch strings.ToLower(v.Severity) {
-				case "critical":
-					vulnCategories.Critical = append(vulnCategories.Critical, v.CVE)
-				case "high":
-					vulnCategories.High = append(vulnCategories.High, v.CVE)
-				case "medium":
-					vulnCategories.Medium = append(vulnCategories.Medium, v.CVE)
-				case "low":
-					vulnCategories.Low = append(vulnCategories.Low, v.CVE)
-				}
-
-				resultsList = append(resultsList, utils.PluginEntry{
+				localResultsList = append(localResultsList, utils.PluginEntry{
 					Plugin:   plugin,
 					Version:  version,
 					Severity: v.Severity,
 					CVEs:     []string{v.CVE},
 				})
 			}
+
+			mu.Lock()
 			results[plugin] = version
-			pluginVersions[plugin] = version
-			pluginVulns[plugin] = vulnCategories
+			pluginVulns[plugin] = VulnCategories{}
+			resultsList = append(resultsList, localResultsList...)
+
+			if writer != nil {
+				writer.WriteResults(plugin, localResultsList)
+			}
 			mu.Unlock()
 		}(plugin)
 	}
@@ -202,5 +203,5 @@ func ScanSite(
 		writer.WriteResults(target, resultsList)
 	}
 
-	DisplayResults(target, results, pluginResult, pluginVulns, opts, progress)
+	DisplayResults(target, results, pluginResult, resultsList, opts, progress)
 }

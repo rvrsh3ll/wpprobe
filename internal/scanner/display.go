@@ -22,11 +22,14 @@ package scanner
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Chocapikk/wpprobe/internal/utils"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/tree"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 var (
@@ -57,34 +60,40 @@ func DisplayResults(
 	target string,
 	detectedPlugins map[string]string,
 	pluginResult PluginDetectionResult,
-	pluginVulns map[string]VulnCategories,
+	resultsList []utils.PluginEntry,
 	opts ScanOptions,
 	progress *utils.ProgressManager,
 ) {
 	vulnTypes := []string{"Critical", "High", "Medium", "Low"}
-	vulnStyles := []lipgloss.Style{criticalStyle, highStyle, mediumStyle, lowStyle}
-	vulnSummary := map[string]int{}
-
-	for _, t := range vulnTypes {
-		vulnSummary[t] = 0
+	vulnStyles := map[string]lipgloss.Style{
+		"Critical": criticalStyle,
+		"High":     highStyle,
+		"Medium":   mediumStyle,
+		"Low":      lowStyle,
 	}
-	for _, cat := range pluginVulns {
-		vulnSummary["Critical"] += len(cat.Critical)
-		vulnSummary["High"] += len(cat.High)
-		vulnSummary["Medium"] += len(cat.Medium)
-		vulnSummary["Low"] += len(cat.Low)
+
+	vulnSummary := make(map[string]int)
+	pluginVulns := make(map[string]VulnCategories)
+
+	for _, entry := range resultsList {
+		vulnCategories := pluginVulns[entry.Plugin]
+		severity := cases.Title(language.Und, cases.NoLower).String(strings.ToLower(entry.Severity))
+
+		if _, exists := vulnStyles[severity]; exists {
+			appendVuln(&vulnCategories, severity, entry.CVEs)
+			vulnSummary[severity] += len(entry.CVEs)
+		}
+
+		pluginVulns[entry.Plugin] = vulnCategories
 	}
 
 	if progress != nil {
 		progress.RenderBlank()
 	}
 
-	var summaryParts []string
+	summaryParts := make([]string, len(vulnTypes))
 	for i, t := range vulnTypes {
-		summaryParts = append(
-			summaryParts,
-			fmt.Sprintf("%s: %d", vulnStyles[i].Render(t), vulnSummary[t]),
-		)
+		summaryParts[i] = fmt.Sprintf("%s: %d", vulnStyles[t].Render(t), vulnSummary[t])
 	}
 	summaryLine := fmt.Sprintf(
 		"🔎 %s (%s)",
@@ -95,32 +104,18 @@ func DisplayResults(
 
 	for _, plugin := range sortedPluginsByConfidence(detectedPlugins, pluginResult.Confidence) {
 		version := detectedPlugins[plugin]
-		vulnCategories := pluginVulns[plugin]
 		confidence := pluginResult.Confidence[plugin]
-		pluginColor := getPluginColor(version, vulnCategories)
-		pluginLabel := fmt.Sprintf("%s (%s)", plugin, version)
-		if pluginResult.Ambiguity[plugin] {
-			pluginLabel = fmt.Sprintf("%s (%s) ⚠️", plugin, version)
-		} else if version == "unknown" {
-			pluginLabel = fmt.Sprintf("%s (%s) [%.2f%% confidence]", plugin, version, confidence)
-		}
+		vulnCategories := pluginVulns[plugin]
 
-		pluginNode := tree.Root(pluginColor.Render(pluginLabel))
+		pluginLabel := formatPluginLabel(
+			plugin,
+			version,
+			confidence,
+			pluginResult.Ambiguity[plugin],
+		)
+		pluginNode := tree.Root(getPluginColor(version, vulnCategories).Render(pluginLabel))
 
-		vulnData := []struct {
-			Category string
-			Data     []string
-			Style    lipgloss.Style
-		}{
-			{"Critical", vulnCategories.Critical, criticalStyle},
-			{"High", vulnCategories.High, highStyle},
-			{"Medium", vulnCategories.Medium, mediumStyle},
-			{"Low", vulnCategories.Low, lowStyle},
-		}
-
-		for _, v := range vulnData {
-			addVulnNode(pluginNode, v.Category, v.Data, v.Style)
-		}
+		addAllVulnNodes(pluginNode, vulnCategories, vulnStyles)
 
 		root.Child(pluginNode)
 	}
@@ -138,6 +133,66 @@ func DisplayResults(
 		progress.Bprintln(encapsulatedResults)
 	} else {
 		fmt.Println(encapsulatedResults)
+	}
+}
+
+func appendVuln(categories *VulnCategories, severity string, cves []string) {
+	switch severity {
+	case "Critical":
+		categories.Critical = append(categories.Critical, cves...)
+	case "High":
+		categories.High = append(categories.High, cves...)
+	case "Medium":
+		categories.Medium = append(categories.Medium, cves...)
+	case "Low":
+		categories.Low = append(categories.Low, cves...)
+	}
+}
+
+func formatPluginLabel(plugin, version string, confidence float64, ambiguous bool) string {
+	if ambiguous {
+		return fmt.Sprintf("%s (%s) ⚠️", plugin, version)
+	}
+	if version == "unknown" {
+		return fmt.Sprintf("%s (%s) [%.2f%% confidence]", plugin, version, confidence)
+	}
+	return fmt.Sprintf("%s (%s)", plugin, version)
+}
+
+func addAllVulnNodes(
+	parent *tree.Tree,
+	categories VulnCategories,
+	vulnStyles map[string]lipgloss.Style,
+) {
+	vulnTypes := []string{"Critical", "High", "Medium", "Low"}
+
+	for _, severity := range vulnTypes {
+		var cves []string
+
+		switch severity {
+		case "Critical":
+			cves = categories.Critical
+		case "High":
+			cves = categories.High
+		case "Medium":
+			cves = categories.Medium
+		case "Low":
+			cves = categories.Low
+		}
+
+		if len(cves) > 0 {
+			vulnNode := tree.Root(vulnStyles[severity].Render(severity))
+
+			for i := 0; i < len(cves); i += 4 {
+				end := i + 4
+				if end > len(cves) {
+					end = len(cves)
+				}
+				vulnNode.Child(strings.Join(cves[i:end], " ⋅ "))
+			}
+
+			parent.Child(vulnNode)
+		}
 	}
 }
 
@@ -195,10 +250,39 @@ func getPluginColor(version string, vulnCategories VulnCategories) lipgloss.Styl
 	return noVulnStyle
 }
 
+func cveCompare(cve1, cve2 string) bool {
+	extractCVEData := func(cve string) (int, int) {
+		parts := strings.Split(cve, "-")
+		if len(parts) != 3 {
+			return 0, 0
+		}
+
+		year, err1 := strconv.Atoi(parts[1])
+		id, err2 := strconv.Atoi(parts[2])
+		if err1 != nil || err2 != nil {
+			return 0, 0
+		}
+
+		return year, id
+	}
+
+	year1, id1 := extractCVEData(cve1)
+	year2, id2 := extractCVEData(cve2)
+
+	if year1 != year2 {
+		return year1 < year2
+	}
+	return id1 < id2
+}
+
 func addVulnNode(parent *tree.Tree, severity string, vulns []string, style lipgloss.Style) {
 	if len(vulns) == 0 {
 		return
 	}
+
+	sort.SliceStable(vulns, func(i, j int) bool {
+		return cveCompare(vulns[i], vulns[j])
+	})
 
 	severityNode := tree.Root(style.Render(severity))
 

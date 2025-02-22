@@ -32,7 +32,7 @@ import (
 	"github.com/Masterminds/semver"
 )
 
-const tagsURL = "https://api.github.com/repos/Chocapikk/wpprobe/tags"
+var tagsURL = "https://api.github.com/repos/Chocapikk/wpprobe/tags"
 
 func CheckLatestVersion(currentVersion string) (string, bool) {
 	resp, err := http.Get(tagsURL)

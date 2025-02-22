@@ -17,20 +17,45 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package utils
+package cmd
 
 import (
-	"embed"
+	"bytes"
+	"errors"
+	"testing"
+
+	"github.com/spf13/cobra"
 )
 
-//go:embed files/scanned_plugins.json
-var embeddedFiles embed.FS
+func TestRunUpdateWordfence_Success(t *testing.T) {
+	originalFunc := updateWordfenceFunc
+	updateWordfenceFunc = func() error { return nil }
+	defer func() { updateWordfenceFunc = originalFunc }()
 
-func GetEmbeddedFile(filename string) ([]byte, error) {
-	data, err := embeddedFiles.ReadFile(filename)
+	cmd := &cobra.Command{}
+	err := runUpdateWordfence(cmd, []string{})
 	if err != nil {
-		logger.Error("Failed to read embedded file: " + err.Error())
-		return nil, err
+		t.Errorf("Expected no error, got %v", err)
 	}
-	return data, nil
+}
+
+func TestRunUpdateWordfence_Failure(t *testing.T) {
+	originalFunc := updateWordfenceFunc
+	updateWordfenceFunc = func() error { return errors.New("mock error") }
+	defer func() { updateWordfenceFunc = originalFunc }()
+
+	buf := new(bytes.Buffer)
+	cmd := &cobra.Command{}
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+
+	err := runUpdateWordfence(cmd, []string{})
+	if err == nil || err.Error() != "mock error" {
+		t.Errorf("Expected 'mock error', got %v", err)
+	}
+
+	output := buf.String()
+	if !bytes.Contains([]byte(output), []byte("mock error")) {
+		t.Errorf("Expected error message in output, got: %s", output)
+	}
 }

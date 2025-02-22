@@ -116,6 +116,10 @@ func DetectPlugins(
 		matches[plugin] = ambiguousGroups[key]
 	}
 
+	if detectedPlugins == nil {
+		detectedPlugins = []string{}
+	}
+
 	return PluginDetectionResult{
 		Scores:     pluginScores,
 		Confidence: pluginConfidence,

@@ -30,11 +30,13 @@ import (
 
 const githubRepo = "Chocapikk/wpprobe"
 
-func GitHubLatestReleaseURL() string {
+var exitFunc = os.Exit
+
+var GitHubLatestReleaseURL = func() string {
 	return fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", githubRepo)
 }
 
-func GitHubDownloadURL(version, osName, arch string) string {
+var GitHubDownloadURL = func(version, osName, arch string) string {
 	var ext string
 	if osName == "windows" {
 		ext = ".exe"
@@ -100,15 +102,15 @@ func AutoUpdate() error {
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode != http.StatusOK {
+		logger.Error(fmt.Sprintf("Update not found: %s", updateURL))
+		return fmt.Errorf("update not found at %s", updateURL)
+	}
+
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		logger.Error("Failed to read update response: " + err.Error())
 		return err
-	}
-
-	if resp.StatusCode != http.StatusOK || string(body) == "Not Found" {
-		logger.Error("Update not found: " + updateURL)
-		return fmt.Errorf("update not found at %s", updateURL)
 	}
 
 	currentExe, err := os.Executable()
@@ -118,7 +120,6 @@ func AutoUpdate() error {
 	}
 
 	logger.Info("Replacing current binary: " + currentExe)
-
 	tmpFile := currentExe + ".tmp"
 
 	if err := os.WriteFile(tmpFile, body, 0o755); err != nil {
@@ -138,7 +139,7 @@ func AutoUpdate() error {
 	}
 
 	logger.Success("Update successful! Restart WPProbe to use the new version.")
-	os.Exit(0)
+	exitFunc(0)
 	return nil
 }
 

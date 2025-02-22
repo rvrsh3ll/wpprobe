@@ -34,10 +34,16 @@ var (
 	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF5733"))
 	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#33CC33"))
 	timeStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
+
+	logger *Logger
 )
 
 type Logger struct {
 	logger *log.Logger
+}
+
+func init() {
+	logger = NewLogger()
 }
 
 func NewLogger() *Logger {
