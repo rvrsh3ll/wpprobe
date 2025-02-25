@@ -17,21 +17,19 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package cmd
+package main
 
-import (
-	"github.com/Chocapikk/wpprobe/internal/utils"
-	"github.com/spf13/cobra"
-)
+import "testing"
 
-var updateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "Update WPProbe to the latest version",
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := utils.AutoUpdate(); err != nil {
-			logger.Error("Update failed: " + err.Error())
-		} else {
-			logger.Success("Update completed successfully!")
-		}
-	},
+func Test_main(t *testing.T) {
+	tests := []struct {
+		name string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			main()
+		})
+	}
 }

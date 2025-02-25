@@ -17,21 +17,48 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package cmd
+package utils
 
 import (
-	"github.com/Chocapikk/wpprobe/internal/utils"
-	"github.com/spf13/cobra"
+	"strings"
+	"testing"
 )
 
-var updateCmd = &cobra.Command{
-	Use:   "update",
-	Short: "Update WPProbe to the latest version",
-	Run: func(cmd *cobra.Command, args []string) {
-		if err := utils.AutoUpdate(); err != nil {
-			logger.Error("Update failed: " + err.Error())
-		} else {
-			logger.Success("Update completed successfully!")
-		}
-	},
+func TestGetEmbeddedFile(t *testing.T) {
+	logger = NewLogger()
+
+	tests := []struct {
+		name     string
+		filename string
+		wantSub  string
+		wantErr  bool
+	}{
+		{
+			name:     "Valid file",
+			filename: "files/scanned_plugins.json",
+			wantSub:  `"3d-viewer"`,
+			wantErr:  false,
+		},
+		{
+			name:     "Non-existent file",
+			filename: "files/nonexistent.json",
+			wantSub:  "",
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := GetEmbeddedFile(tt.filename)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GetEmbeddedFile() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			if !tt.wantErr && !strings.Contains(string(got), tt.wantSub) {
+				t.Errorf("Expected content to contain '%s', but got: %s", tt.wantSub, string(got))
+			}
+		})
+	}
 }

@@ -20,13 +20,11 @@
 package scanner
 
 import (
-	"fmt"
+	"math"
+	"sync"
+
 	"github.com/Chocapikk/wpprobe/internal/utils"
 	"github.com/Chocapikk/wpprobe/internal/wordfence"
-	"log"
-	"math"
-	"strings"
-	"sync"
 )
 
 type ScanOptions struct {
@@ -45,7 +43,8 @@ func ScanTargets(opts ScanOptions) {
 	if opts.File != "" {
 		lines, err := utils.ReadLines(opts.File)
 		if err != nil {
-			log.Fatalf("❌ Failed to read file: %v\n", err)
+			logger.Error("Failed to read file: " + err.Error())
+			return
 		}
 		targets = lines
 	} else {
@@ -56,7 +55,7 @@ func ScanTargets(opts ScanOptions) {
 
 	var progress *utils.ProgressManager
 	if opts.File != "" {
-		progress = utils.NewProgressBar(len(targets))
+		progress = utils.NewProgressBar(len(targets), "🔎 Scanning...")
 	}
 
 	var writer utils.WriterInterface
@@ -66,32 +65,42 @@ func ScanTargets(opts ScanOptions) {
 	}
 
 	var wg sync.WaitGroup
+	var mu sync.RWMutex
 	sem := make(chan struct{}, opts.Threads)
 
 	for _, target := range targets {
 		wg.Add(1)
 		sem <- struct{}{}
-
 		go func(t string, scanThreads int) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			defer func() {
-				_ = recover()
-			}()
-
+			defer func() { _ = recover() }()
 			localOpts := opts
 			localOpts.Threads = scanThreads
 			ScanSite(t, localOpts, writer, progress)
+			if progress != nil {
+				mu.Lock()
+				progress.Increment()
+				mu.Unlock()
+			}
 		}(target, siteThreads)
 	}
 
 	wg.Wait()
+	if progress != nil {
+		progress.Finish()
+	}
 }
 
-func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, progress *utils.ProgressManager) {
+func ScanSite(
+	target string,
+	opts ScanOptions,
+	writer utils.WriterInterface,
+	progress *utils.ProgressManager,
+) {
 	data, err := utils.GetEmbeddedFile("files/scanned_plugins.json")
 	if err != nil {
-		fmt.Printf("\n❌ Failed to load scanned_plugins.json: %v\n", err)
+		logger.Error("Failed to load scanned_plugins.json: " + err.Error())
 		if progress != nil {
 			progress.Increment()
 		}
@@ -100,7 +109,7 @@ func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, pro
 
 	pluginEndpoints, err := LoadPluginEndpointsFromData(data)
 	if err != nil {
-		fmt.Printf("\n❌ Failed to parse scanned_plugins.json: %v\n", err)
+		logger.Error("Failed to parse scanned_plugins.json: " + err.Error())
 		if progress != nil {
 			progress.Increment()
 		}
@@ -110,7 +119,7 @@ func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, pro
 	endpoints := FetchEndpoints(target)
 	if len(endpoints) == 0 {
 		if opts.File == "" {
-			fmt.Printf("\n❌ No REST endpoints found on %s\n", target)
+			logger.Warning("No REST endpoints found on " + target)
 		}
 		if progress != nil {
 			progress.Increment()
@@ -121,19 +130,19 @@ func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, pro
 	pluginResult := DetectPlugins(endpoints, pluginEndpoints)
 	if len(pluginResult.Detected) == 0 {
 		if opts.File == "" {
-			fmt.Printf("\n❌ No plugins detected on %s\n", target)
+			logger.Warning("No plugins detected on " + target)
 		}
 		if progress != nil {
 			progress.Increment()
+		}
+		if writer != nil {
+			writer.WriteResults(target, []utils.PluginEntry{})
 		}
 		return
 	}
 
 	results := make(map[string]string)
-	pluginVulns := make(map[string]VulnCategories)
-	pluginVersions := make(map[string]string)
 	var resultsList []utils.PluginEntry
-
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 	sem := make(chan struct{}, opts.Threads)
@@ -141,53 +150,45 @@ func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, pro
 	for _, plugin := range pluginResult.Detected {
 		wg.Add(1)
 		sem <- struct{}{}
-
 		go func(plugin string) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			defer func() {
-				_ = recover()
-			}()
-
+			defer func() { _ = recover() }()
+			var localResultsList []utils.PluginEntry
 			version := "unknown"
 			if !opts.NoCheckVersion {
 				version = utils.GetPluginVersion(target, plugin, opts.Threads)
 			}
 
 			vulns := wordfence.GetVulnerabilitiesForPlugin(plugin, version)
-			if vulns == nil {
-				return
-			}
-
-			vulnCategories := VulnCategories{}
-
-			mu.Lock()
-			for _, v := range vulns {
-				switch strings.ToLower(v.Severity) {
-				case "critical":
-					vulnCategories.Critical = append(vulnCategories.Critical, v.CVE)
-				case "high":
-					vulnCategories.High = append(vulnCategories.High, v.CVE)
-				case "medium":
-					vulnCategories.Medium = append(vulnCategories.Medium, v.CVE)
-				case "low":
-					vulnCategories.Low = append(vulnCategories.Low, v.CVE)
-				}
-
-				resultsList = append(resultsList, utils.PluginEntry{
+			if len(vulns) == 0 {
+				localResultsList = append(localResultsList, utils.PluginEntry{
 					Plugin:   plugin,
 					Version:  version,
-					Severity: v.Severity,
-					CVEs:     []string{v.CVE},
+					Severity: "None",
+					CVEs:     []string{},
+					Title:    "No vulnerabilities found",
+					AuthType: "N/A",
 				})
+			} else {
+				for _, v := range vulns {
+					localResultsList = append(localResultsList, utils.PluginEntry{
+						Plugin:   plugin,
+						Version:  version,
+						Severity: v.Severity,
+						CVEs:     []string{v.CVE},
+						Title:    v.Title,
+						AuthType: v.AuthType,
+					})
+				}
 			}
+
+			mu.Lock()
 			results[plugin] = version
-			pluginVersions[plugin] = version
-			pluginVulns[plugin] = vulnCategories
+			resultsList = append(resultsList, localResultsList...)
 			mu.Unlock()
 		}(plugin)
 	}
-
 	wg.Wait()
 
 	if progress != nil {
@@ -198,5 +199,5 @@ func ScanSite(target string, opts ScanOptions, writer utils.WriterInterface, pro
 		writer.WriteResults(target, resultsList)
 	}
 
-	DisplayResults(target, results, pluginResult, pluginVulns, opts, progress)
+	DisplayResults(target, results, pluginResult, resultsList, opts, progress)
 }

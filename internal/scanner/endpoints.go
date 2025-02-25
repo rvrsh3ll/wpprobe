@@ -22,8 +22,9 @@ package scanner
 import (
 	"time"
 
+	"encoding/json"
+
 	"github.com/Chocapikk/wpprobe/internal/utils"
-	"github.com/goccy/go-json"
 )
 
 func FetchEndpoints(target string) []string {

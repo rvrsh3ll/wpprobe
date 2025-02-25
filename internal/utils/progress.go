@@ -35,12 +35,12 @@ type ProgressManager struct {
 	mu  sync.Mutex
 }
 
-func NewProgressBar(total int) *ProgressManager {
+func NewProgressBar(total int, description string) *ProgressManager {
 	bar := progressbar.NewOptions(total,
 		progressbar.OptionSetWriter(ansi.NewAnsiStderr()),
 		progressbar.OptionEnableColorCodes(true),
 		progressbar.OptionShowIts(),
-		progressbar.OptionSetDescription("[cyan]🔎 Scanning..."),
+		progressbar.OptionSetDescription("[cyan]"+description),
 		progressbar.OptionSetTheme(progressbar.Theme{
 			Saucer:        "▓",
 			SaucerHead:    "▒",
@@ -69,19 +69,27 @@ func NewProgressBar(total int) *ProgressManager {
 func (p *ProgressManager) Increment() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.bar.Add(1)
+	_ = p.bar.Add(1)
 }
 
 func (p *ProgressManager) Finish() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.bar.Finish()
+	_ = p.bar.Finish()
 }
 
 func (p *ProgressManager) RenderBlank() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.bar.RenderBlank()
+	_ = p.bar.RenderBlank()
+}
+
+func (p *ProgressManager) Write(data []byte) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	n := len(data)
+	_ = p.bar.Add(n)
+	return n, nil
 }
 
 func (p *ProgressManager) Bprintln(a ...interface{}) (int, error) {
