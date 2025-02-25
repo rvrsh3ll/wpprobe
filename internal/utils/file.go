@@ -45,7 +45,7 @@ type PluginEntry struct {
 	Severity string   `json:"severity"`
 	CVEs     []string `json:"cves"`
 	Title    string   `json:"title"`
-	AuthType string   `json:"authType"`
+	AuthType string   `json:"auth_type"`
 }
 
 func authTypeOrder(auth string) int {
@@ -170,8 +170,8 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 				for _, a := range desiredAuthOrder {
 					if cves, ok := authMap[a]; ok && len(cves) > 0 {
 						ordered = append(ordered, map[string]interface{}{
-							"authType": cases.Title(language.Und).String(a),
-							"cves":     cves,
+							"auth_type": cases.Title(language.Und).String(a),
+							"cves":      cves,
 						})
 					}
 				}

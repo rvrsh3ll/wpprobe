@@ -158,13 +158,13 @@ http://localhost:5555,woocommerce,9.6.0,None,N/A,,No vulnerabilities found
         "severities": {
           "critical": [
             {
-              "authType": "Unauth",
+              "auth_type": "Unauth",
               "cves": ["CVE-2025-22777", "CVE-2024-9634"]
             }
           ],
           "medium": [
             {
-              "authType": "Auth",
+              "auth_type": "Auth",
               "cves": ["CVE-2024-1957", "CVE-2022-40211"]
             }
           ]

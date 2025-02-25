@@ -46,7 +46,7 @@ type Vulnerability struct {
 	Severity        string `json:"severity"`
 	CVE             string `json:"cve"`
 	CVELink         string `json:"cve_link"`
-	AuthType        string `json:"authType"`
+	AuthType        string `json:"auth_type"`
 }
 
 func UpdateWordfence() error {
