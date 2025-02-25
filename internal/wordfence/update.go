@@ -30,7 +30,10 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/utils"
 )
 
-var logger = utils.NewLogger()
+var (
+	cachedVulnerabilities []Vulnerability
+	cacheLoaded           bool
+)
 
 const wordfenceAPI = "https://www.wordfence.com/api/intelligence/v2/vulnerabilities/production"
 
@@ -50,7 +53,7 @@ type Vulnerability struct {
 }
 
 func UpdateWordfence() error {
-	logger.Info("Fetching Wordfence data...")
+	utils.DefaultLogger.Info("Fetching Wordfence data...")
 
 	data, err := fetchWordfenceData()
 	if err != nil {
@@ -58,16 +61,16 @@ func UpdateWordfence() error {
 		return err
 	}
 
-	logger.Info("Processing vulnerabilities...")
+	utils.DefaultLogger.Info("Processing vulnerabilities...")
 	vulnerabilities := processWordfenceData(data)
 
-	logger.Info("Saving vulnerabilities to file...")
+	utils.DefaultLogger.Info("Saving vulnerabilities to file...")
 	if err := saveVulnerabilitiesToFile(vulnerabilities); err != nil {
-		logger.Error("Failed to save Wordfence data: " + err.Error())
+		utils.DefaultLogger.Error("Failed to save Wordfence data: " + err.Error())
 		return err
 	}
 
-	logger.Success("Wordfence data updated successfully!")
+	utils.DefaultLogger.Success("Wordfence data updated successfully!")
 	return nil
 }
 
@@ -81,12 +84,12 @@ func fetchWordfenceData() (map[string]interface{}, error) {
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		logger.Info("Decoding JSON data... This may take some time.")
+		utils.DefaultLogger.Info("Decoding JSON data... This may take some time.")
 		var data map[string]interface{}
 		if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
 			return nil, fmt.Errorf("JSON decoding error: %w", err)
 		}
-		logger.Success("Successfully retrieved and processed Wordfence data.")
+		utils.DefaultLogger.Success("Successfully retrieved and processed Wordfence data.")
 		return data, nil
 
 	case http.StatusTooManyRequests:
@@ -108,9 +111,11 @@ func fetchWordfenceData() (map[string]interface{}, error) {
 func handleFetchError(err error) {
 	switch {
 	case strings.Contains(err.Error(), "429"):
-		logger.Warning("Wordfence API rate limit hit (429). Please wait before retrying.")
+		utils.DefaultLogger.Warning(
+			"Wordfence API rate limit hit (429). Please wait before retrying.",
+		)
 	default:
-		logger.Error("Failed to retrieve Wordfence data: " + err.Error())
+		utils.DefaultLogger.Error("Failed to retrieve Wordfence data: " + err.Error())
 	}
 }
 
@@ -197,13 +202,13 @@ func processWordfenceData(wfData map[string]interface{}) []Vulnerability {
 func saveVulnerabilitiesToFile(vulnerabilities []Vulnerability) error {
 	outputPath, err := utils.GetStoragePath("wordfence_vulnerabilities.json")
 	if err != nil {
-		logger.Error("Error getting storage path: " + err.Error())
+		utils.DefaultLogger.Error("Error getting storage path: " + err.Error())
 		return err
 	}
 
 	file, err := os.Create(outputPath)
 	if err != nil {
-		logger.Error("Error saving file: " + err.Error())
+		utils.DefaultLogger.Error("Error saving file: " + err.Error())
 		return err
 	}
 	defer file.Close()
@@ -212,33 +217,44 @@ func saveVulnerabilitiesToFile(vulnerabilities []Vulnerability) error {
 	encoder.SetIndent("", "  ")
 
 	if err := encoder.Encode(vulnerabilities); err != nil {
-		logger.Error("Error encoding JSON: " + err.Error())
+		utils.DefaultLogger.Error("Error encoding JSON: " + err.Error())
 		return err
 	}
 
-	logger.Success("Wordfence data saved in " + outputPath)
+	utils.DefaultLogger.Success("Wordfence data saved in " + outputPath)
 	return nil
 }
 
 func LoadVulnerabilities(filename string) ([]Vulnerability, error) {
+	if cacheLoaded {
+		return cachedVulnerabilities, nil
+	}
+
 	filePath, err := utils.GetStoragePath(filename)
 	if err != nil {
-		return nil, err
+		utils.DefaultLogger.Warning("Failed to get storage path: " + err.Error())
+		return []Vulnerability{}, err
 	}
 
-	file, err := os.Open(filePath)
+	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, err
+		utils.DefaultLogger.Warning("Failed to read Wordfence JSON: " + err.Error())
+		utils.DefaultLogger.Info(
+			"Run 'wpprobe update-db' to fetch the latest vulnerability database.",
+		)
+		utils.DefaultLogger.Warning(
+			"The scan will proceed, but vulnerabilities will not be displayed.",
+		)
+		return []Vulnerability{}, err
 	}
-	defer file.Close()
 
-	var vulnerabilities []Vulnerability
-	decoder := json.NewDecoder(file)
-	if err := decoder.Decode(&vulnerabilities); err != nil {
-		return nil, err
+	if err := json.Unmarshal(data, &cachedVulnerabilities); err != nil {
+		utils.DefaultLogger.Warning("JSON unmarshal error: " + err.Error())
+		return []Vulnerability{}, err
 	}
 
-	return vulnerabilities, nil
+	cacheLoaded = true
+	return cachedVulnerabilities, nil
 }
 
 func GetVulnerabilitiesForPlugin(plugin string, version string) []Vulnerability {

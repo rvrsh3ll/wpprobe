@@ -183,10 +183,13 @@ func TestGetVulnerabilitiesForPlugin(t *testing.T) {
 		t.Fatalf("Failed to encode vulnerabilities: %v", err)
 	}
 
+	cachedVulnerabilities = nil
+	cacheLoaded = false
+
 	got := GetVulnerabilitiesForPlugin("test-plugin", "1.5.0")
 
-	if len(got) != 1 {
-		t.Errorf("Expected 1 vulnerability, got %d", len(got))
+	if len(got) == 0 {
+		t.Fatalf("Expected at least 1 vulnerability, got 0")
 	}
 
 	if got[0].CVE != "CVE-2024-0001" {

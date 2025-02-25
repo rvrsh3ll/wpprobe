@@ -35,20 +35,16 @@ var (
 	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#33CC33"))
 	timeStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
 
-	logger *Logger
+	DefaultLogger = NewLogger()
 )
 
 type Logger struct {
-	logger *log.Logger
-}
-
-func init() {
-	logger = NewLogger()
+	Logger *log.Logger
 }
 
 func NewLogger() *Logger {
 	return &Logger{
-		logger: log.New(os.Stdout, "", 0),
+		Logger: log.New(os.Stdout, "", 0),
 	}
 }
 
@@ -57,19 +53,19 @@ func formatTime() string {
 }
 
 func (l *Logger) Info(msg string) {
-	l.logger.Println(formatTime() + " [" + infoStyle.Render("INFO") + "] " + msg)
+	l.Logger.Println(formatTime() + " [" + infoStyle.Render("INFO") + "] " + msg)
 }
 
 func (l *Logger) Warning(msg string) {
-	l.logger.Println(formatTime() + " [" + warningStyle.Render("WARNING") + "] " + msg)
+	l.Logger.Println(formatTime() + " [" + warningStyle.Render("WARNING") + "] " + msg)
 }
 
 func (l *Logger) Error(msg string) {
-	l.logger.Println(formatTime() + " [" + errorStyle.Render("ERROR") + "] " + msg)
+	l.Logger.Println(formatTime() + " [" + errorStyle.Render("ERROR") + "] " + msg)
 }
 
 func (l *Logger) Success(msg string) {
-	l.logger.Println(formatTime() + " [" + successStyle.Render("SUCCESS") + "] " + msg)
+	l.Logger.Println(formatTime() + " [" + successStyle.Render("SUCCESS") + "] " + msg)
 }
 
 func (l *Logger) PrintBanner(version string, isLatest bool) {

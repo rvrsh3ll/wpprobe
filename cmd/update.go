@@ -29,9 +29,9 @@ var updateCmd = &cobra.Command{
 	Short: "Update WPProbe to the latest version",
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := utils.AutoUpdate(); err != nil {
-			logger.Error("Update failed: " + err.Error())
+			utils.DefaultLogger.Error("Update failed: " + err.Error())
 		} else {
-			logger.Success("Update completed successfully!")
+			utils.DefaultLogger.Success("Update completed successfully!")
 		}
 	},
 }

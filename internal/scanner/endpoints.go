@@ -21,6 +21,7 @@ package scanner
 
 import (
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/Chocapikk/wpprobe/internal/utils"
@@ -53,11 +54,36 @@ func fetchEndpointsFromPath(target, path string, httpClient *utils.HTTPClientMan
 func FetchEndpoints(target string) []string {
 	httpClient := utils.NewHTTPClient(10 * time.Second)
 
-	endpoints := fetchEndpointsFromPath(target, "/?rest_route=/", httpClient)
-	if len(endpoints) > 0 {
-		return endpoints
+	endpointsChan := make(chan []string, 2)
+	var wg sync.WaitGroup
+
+	paths := []string{"/?rest_route=/", "/wp-json"}
+
+	for _, path := range paths {
+		wg.Add(1)
+		go func(p string) {
+			defer wg.Done()
+			endpoints := fetchEndpointsFromPath(target, p, httpClient)
+			endpointsChan <- endpoints
+		}(path)
 	}
 
-	endpoints = fetchEndpointsFromPath(target, "/wp-json", httpClient)
-	return endpoints
+	go func() {
+		wg.Wait()
+		close(endpointsChan)
+	}()
+
+	uniqueEndpoints := make(map[string]struct{})
+	for epList := range endpointsChan {
+		for _, ep := range epList {
+			uniqueEndpoints[ep] = struct{}{}
+		}
+	}
+
+	finalEndpoints := make([]string, 0, len(uniqueEndpoints))
+	for ep := range uniqueEndpoints {
+		finalEndpoints = append(finalEndpoints, ep)
+	}
+
+	return finalEndpoints
 }

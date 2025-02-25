@@ -25,8 +25,6 @@ import (
 )
 
 func TestGetEmbeddedFile(t *testing.T) {
-	logger = NewLogger()
-
 	tests := []struct {
 		name     string
 		filename string

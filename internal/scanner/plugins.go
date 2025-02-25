@@ -30,8 +30,6 @@ import (
 	"github.com/Chocapikk/wpprobe/internal/utils"
 )
 
-var logger = utils.NewLogger()
-
 type PluginDetectionResult struct {
 	Scores     map[string]int
 	Confidence map[string]float64
@@ -56,7 +54,7 @@ func LoadPluginEndpointsFromData(data []byte) (map[string][]string, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		logger.Error("Error reading embedded JSONL data: " + err.Error())
+		utils.DefaultLogger.Error("Error reading embedded JSONL data: " + err.Error())
 		return nil, err
 	}
 

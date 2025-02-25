@@ -46,7 +46,7 @@ var scanCmd = &cobra.Command{
 		}
 
 		if opts.URL == "" && opts.File == "" {
-			logger.Error("You must provide either --url or --file")
+			utils.DefaultLogger.Error("You must provide either --url or --file")
 			os.Exit(1)
 		}
 
@@ -65,7 +65,7 @@ func init() {
 
 func mustBool(value bool, err error) bool {
 	if err != nil {
-		logger.Warning("Failed to parse boolean flag, defaulting to false")
+		utils.DefaultLogger.Warning("Failed to parse boolean flag, defaulting to false")
 		return false
 	}
 	return value
@@ -73,7 +73,7 @@ func mustBool(value bool, err error) bool {
 
 func mustInt(value int, err error) int {
 	if err != nil {
-		logger.Warning("Failed to parse integer flag, defaulting to 10")
+		utils.DefaultLogger.Warning("Failed to parse integer flag, defaulting to 10")
 		return 10
 	}
 	return value

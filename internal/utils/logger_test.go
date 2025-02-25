@@ -43,10 +43,12 @@ func Test_formatTime(t *testing.T) {
 
 func TestLogger_Info(t *testing.T) {
 	var buf bytes.Buffer
-	logger := &Logger{logger: log.New(&buf, "", 0)}
+	originalLogger := DefaultLogger.Logger
+	DefaultLogger.Logger = log.New(&buf, "", 0)
+	defer func() { DefaultLogger.Logger = originalLogger }() // Restaure l'ancien Logger
 
 	msg := "This is an info message"
-	logger.Info(msg)
+	DefaultLogger.Info(msg)
 
 	if !strings.Contains(buf.String(), "INFO") || !strings.Contains(buf.String(), msg) {
 		t.Errorf("Info() log = %v, want to contain 'INFO' and message", buf.String())
@@ -55,10 +57,12 @@ func TestLogger_Info(t *testing.T) {
 
 func TestLogger_Warning(t *testing.T) {
 	var buf bytes.Buffer
-	logger := &Logger{logger: log.New(&buf, "", 0)}
+	originalLogger := DefaultLogger.Logger
+	DefaultLogger.Logger = log.New(&buf, "", 0)
+	defer func() { DefaultLogger.Logger = originalLogger }()
 
 	msg := "This is a warning message"
-	logger.Warning(msg)
+	DefaultLogger.Warning(msg)
 
 	if !strings.Contains(buf.String(), "WARNING") || !strings.Contains(buf.String(), msg) {
 		t.Errorf("Warning() log = %v, want to contain 'WARNING' and message", buf.String())
@@ -67,10 +71,12 @@ func TestLogger_Warning(t *testing.T) {
 
 func TestLogger_Error(t *testing.T) {
 	var buf bytes.Buffer
-	logger := &Logger{logger: log.New(&buf, "", 0)}
+	originalLogger := DefaultLogger.Logger
+	DefaultLogger.Logger = log.New(&buf, "", 0)
+	defer func() { DefaultLogger.Logger = originalLogger }()
 
 	msg := "This is an error message"
-	logger.Error(msg)
+	DefaultLogger.Error(msg)
 
 	if !strings.Contains(buf.String(), "ERROR") || !strings.Contains(buf.String(), msg) {
 		t.Errorf("Error() log = %v, want to contain 'ERROR' and message", buf.String())
@@ -79,10 +85,12 @@ func TestLogger_Error(t *testing.T) {
 
 func TestLogger_Success(t *testing.T) {
 	var buf bytes.Buffer
-	logger := &Logger{logger: log.New(&buf, "", 0)}
+	originalLogger := DefaultLogger.Logger
+	DefaultLogger.Logger = log.New(&buf, "", 0)
+	defer func() { DefaultLogger.Logger = originalLogger }()
 
 	msg := "This is a success message"
-	logger.Success(msg)
+	DefaultLogger.Success(msg)
 
 	if !strings.Contains(buf.String(), "SUCCESS") || !strings.Contains(buf.String(), msg) {
 		t.Errorf("Success() log = %v, want to contain 'SUCCESS' and message", buf.String())
@@ -90,17 +98,13 @@ func TestLogger_Success(t *testing.T) {
 }
 
 func TestLogger_PrintBanner(t *testing.T) {
-	var buf bytes.Buffer
 	originalStdout := os.Stdout
-
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	logger := &Logger{logger: log.New(&buf, "", 0)}
-
 	version := "v1.0.0"
 	isLatest := true
-	logger.PrintBanner(version, isLatest)
+	DefaultLogger.PrintBanner(version, isLatest)
 
 	w.Close()
 	var outBuf bytes.Buffer
@@ -113,11 +117,10 @@ func TestLogger_PrintBanner(t *testing.T) {
 		t.Errorf("PrintBanner() output = %v, want version %v and 'latest'", output, version)
 	}
 
-	buf.Reset()
 	r, w, _ = os.Pipe()
 	os.Stdout = w
 
-	logger.PrintBanner(version, false)
+	DefaultLogger.PrintBanner(version, false)
 
 	w.Close()
 	outBuf.Reset()

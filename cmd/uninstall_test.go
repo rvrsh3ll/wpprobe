@@ -47,40 +47,36 @@ func createTempFile(t *testing.T) string {
 }
 
 func Test_removeDir(t *testing.T) {
-	logger := utils.NewLogger()
 	subdir := createTempDirWithSubdir(t)
 	if _, err := os.Stat(subdir); os.IsNotExist(err) {
 		t.Fatalf("Subdir does not exist before removal")
 	}
-	removeDir(subdir, "Test subdir", logger)
+	removeDir(subdir, "Test subdir", utils.DefaultLogger)
 	if _, err := os.Stat(subdir); !os.IsNotExist(err) {
 		t.Errorf("Subdir was not removed")
 	}
 }
 
 func Test_removeFile(t *testing.T) {
-	logger := utils.NewLogger()
 	tmpFile := createTempFile(t)
 	if _, err := os.Stat(tmpFile); os.IsNotExist(err) {
 		t.Fatalf("Temp file does not exist before removal")
 	}
-	removeFile(tmpFile, "Test file", logger)
+	removeFile(tmpFile, "Test file", utils.DefaultLogger)
 	if _, err := os.Stat(tmpFile); !os.IsNotExist(err) {
 		t.Errorf("Temp file was not removed")
 	}
 }
 
 func Test_mustGetUserConfigDir(t *testing.T) {
-	logger := utils.NewLogger()
-	configDir := mustGetUserConfigDir(logger)
+	configDir := mustGetUserConfigDir(utils.DefaultLogger)
 	if configDir == "" {
 		t.Errorf("mustGetUserConfigDir returned empty string")
 	}
 }
 
 func Test_mustGetExecutable(t *testing.T) {
-	logger := utils.NewLogger()
-	execPath := mustGetExecutable(logger)
+	execPath := mustGetExecutable(utils.DefaultLogger)
 	if execPath == "" {
 		t.Errorf("mustGetExecutable returned empty string")
 	}
@@ -90,14 +86,12 @@ func Test_mustGetExecutable(t *testing.T) {
 }
 
 func Test_mustErr_NoError(t *testing.T) {
-	logger := utils.NewLogger()
-	mustErr(nil, "No error", logger)
+	mustErr(nil, "No error", utils.DefaultLogger)
 }
 
 func Test_mustErr_WithError(t *testing.T) {
 	if os.Getenv("TEST_MUSTERR") == "1" {
-		logger := utils.NewLogger()
-		mustErr(os.ErrInvalid, "Test mustErr with error", logger)
+		mustErr(os.ErrInvalid, "Test mustErr with error", utils.DefaultLogger)
 		return
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=Test_mustErr_WithError")

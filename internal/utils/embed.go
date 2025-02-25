@@ -29,7 +29,7 @@ var embeddedFiles embed.FS
 func GetEmbeddedFile(filename string) ([]byte, error) {
 	data, err := embeddedFiles.ReadFile(filename)
 	if err != nil {
-		logger.Error("Failed to read embedded file: " + err.Error())
+		DefaultLogger.Error("Failed to read embedded file: " + err.Error())
 		return nil, err
 	}
 	return data, nil

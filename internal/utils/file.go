@@ -72,7 +72,7 @@ type CSVWriter struct {
 func NewCSVWriter(output string) *CSVWriter {
 	file, err := os.Create(output)
 	if err != nil {
-		logger.Error("Failed to create CSV file: " + err.Error())
+		DefaultLogger.Error("Failed to create CSV file: " + err.Error())
 		return nil
 	}
 
@@ -123,7 +123,7 @@ type JSONWriter struct {
 func NewJSONWriter(output string) *JSONWriter {
 	file, err := os.Create(output)
 	if err != nil {
-		logger.Error("Failed to create JSON file: " + err.Error())
+		DefaultLogger.Error("Failed to create JSON file: " + err.Error())
 		os.Exit(1)
 	}
 
@@ -246,7 +246,7 @@ func FormatVulnerabilities(vulnMap map[string][]string) string {
 func ReadLines(filename string) ([]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		logger.Error("Failed to open file: " + err.Error())
+		DefaultLogger.Error("Failed to open file: " + err.Error())
 		return nil, err
 	}
 	defer file.Close()
@@ -256,7 +256,7 @@ func ReadLines(filename string) ([]string, error) {
 		lines = append(lines, scanner.Text())
 	}
 	if err := scanner.Err(); err != nil {
-		logger.Error("Failed to read lines: " + err.Error())
+		DefaultLogger.Error("Failed to read lines: " + err.Error())
 		return nil, err
 	}
 	return lines, nil
@@ -265,12 +265,12 @@ func ReadLines(filename string) ([]string, error) {
 func GetStoragePath(filename string) (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		logger.Error("Failed to get config directory: " + err.Error())
+		DefaultLogger.Error("Failed to get config directory: " + err.Error())
 		return "", err
 	}
 	storagePath := filepath.Join(configDir, "wpprobe")
 	if err := os.MkdirAll(storagePath, 0755); err != nil {
-		logger.Error("Failed to create storage directory: " + err.Error())
+		DefaultLogger.Error("Failed to create storage directory: " + err.Error())
 		return "", err
 	}
 	return filepath.Join(storagePath, filename), nil

@@ -43,50 +43,48 @@ func init() {
 }
 
 func uninstall() {
-	logger := utils.NewLogger()
+	configDir := mustGetUserConfigDir(utils.DefaultLogger)
+	removeDir(filepath.Join(configDir, "wpprobe"), "WPProbe configuration", utils.DefaultLogger)
 
-	configDir := mustGetUserConfigDir(logger)
-	removeDir(filepath.Join(configDir, "wpprobe"), "WPProbe configuration", logger)
+	execPath := mustGetExecutable(utils.DefaultLogger)
+	removeFile(execPath, "WPProbe binary", utils.DefaultLogger)
 
-	execPath := mustGetExecutable(logger)
-	removeFile(execPath, "WPProbe binary", logger)
-
-	logger.Success("WPProbe has been fully uninstalled.")
+	utils.DefaultLogger.Success("WPProbe has been fully uninstalled.")
 }
 
-func removeDir(path, description string, logger *utils.Logger) {
+func removeDir(path, description string, DefaultLogger *utils.Logger) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		logger.Warning(description + " not found. Nothing to remove.")
+		utils.DefaultLogger.Warning(description + " not found. Nothing to remove.")
 		return
 	}
-	mustErr(os.RemoveAll(path), "Failed to remove "+description, logger)
+	mustErr(os.RemoveAll(path), "Failed to remove "+description, utils.DefaultLogger)
 }
 
-func removeFile(path, description string, logger *utils.Logger) {
-	mustErr(os.Remove(path), "Failed to remove "+description, logger)
+func removeFile(path, description string, DefaultLogger *utils.Logger) {
+	mustErr(os.Remove(path), "Failed to remove "+description, utils.DefaultLogger)
 }
 
-func mustGetUserConfigDir(logger *utils.Logger) string {
+func mustGetUserConfigDir(DefaultLogger *utils.Logger) string {
 	dir, err := getUserConfigDirFunc()
 	if err != nil {
-		logger.Error("Failed to get user config directory: " + err.Error())
+		utils.DefaultLogger.Error("Failed to get user config directory: " + err.Error())
 		os.Exit(1)
 	}
 	return dir
 }
 
-func mustGetExecutable(logger *utils.Logger) string {
+func mustGetExecutable(DefaultLogger *utils.Logger) string {
 	execPath, err := getExecutableFunc()
 	if err != nil {
-		logger.Error("Failed to get executable path: " + err.Error())
+		utils.DefaultLogger.Error("Failed to get executable path: " + err.Error())
 		os.Exit(1)
 	}
 	return execPath
 }
 
-func mustErr(err error, msg string, logger *utils.Logger) {
+func mustErr(err error, msg string, DefaultLogger *utils.Logger) {
 	if err != nil {
-		logger.Error(msg + ": " + err.Error())
+		utils.DefaultLogger.Error(msg + ": " + err.Error())
 		os.Exit(1)
 	}
 }

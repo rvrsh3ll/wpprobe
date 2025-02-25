@@ -103,3 +103,9 @@ func (p *ProgressManager) Bprintf(format string, a ...interface{}) (int, error) 
 	defer p.mu.Unlock()
 	return progressbar.Bprintf(p.bar, format, a...)
 }
+
+func (p *ProgressManager) SetTotal(total int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.bar.ChangeMax(total)
+}

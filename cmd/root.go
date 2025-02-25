@@ -26,7 +26,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var logger = utils.NewLogger()
 var version = "dev"
 
 var rootCmd = &cobra.Command{
@@ -38,10 +37,10 @@ var rootCmd = &cobra.Command{
 
 func Execute() {
 	_, isLatest := utils.CheckLatestVersion(version)
-	logger.PrintBanner(version, isLatest)
+	utils.DefaultLogger.PrintBanner(version, isLatest)
 
 	if err := rootCmd.Execute(); err != nil {
-		logger.Error(err.Error())
+		utils.DefaultLogger.Error(err.Error())
 		os.Exit(1)
 	}
 }
@@ -59,12 +58,12 @@ func init() {
 
 	cobra.OnInitialize(func() {
 		rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
-			logger.Error(err.Error())
+			utils.DefaultLogger.Error(err.Error())
 			return err
 		})
 		rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 			if cmd.Parent() == nil {
-				logger.Error("Unknown command: " + cmd.Name())
+				utils.DefaultLogger.Error("Unknown command: " + cmd.Name())
 			}
 			return nil
 		}

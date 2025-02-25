@@ -53,37 +53,37 @@ var GitHubDownloadURL = func(version, osName, arch string) string {
 }
 
 func getLatestVersion() (string, error) {
-	logger.Info("Fetching latest WPProbe version...")
+	DefaultLogger.Info("Fetching latest WPProbe version...")
 	resp, err := http.Get(GitHubLatestReleaseURL())
 	if err != nil {
-		logger.Error("Failed to fetch latest release: " + err.Error())
+		DefaultLogger.Error("Failed to fetch latest release: " + err.Error())
 		return "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		logger.Error(fmt.Sprintf("GitHub API error: %d", resp.StatusCode))
+		DefaultLogger.Error(fmt.Sprintf("GitHub API error: %d", resp.StatusCode))
 		return "", fmt.Errorf("GitHub API error: %d", resp.StatusCode)
 	}
 
 	var result map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		logger.Error("Failed to parse JSON response: " + err.Error())
+		DefaultLogger.Error("Failed to parse JSON response: " + err.Error())
 		return "", err
 	}
 
 	version, ok := result["tag_name"].(string)
 	if !ok || version == "" {
-		logger.Error("Failed to extract latest version from GitHub API")
+		DefaultLogger.Error("Failed to extract latest version from GitHub API")
 		return "", fmt.Errorf("invalid version format")
 	}
 
-	logger.Success("Latest WPProbe version found: " + version)
+	DefaultLogger.Success("Latest WPProbe version found: " + version)
 	return version, nil
 }
 
 func AutoUpdate() error {
-	logger.Info("Checking for WPProbe updates...")
+	DefaultLogger.Info("Checking for WPProbe updates...")
 
 	version, err := getLatestVersion()
 	if err != nil {
@@ -94,51 +94,53 @@ func AutoUpdate() error {
 	arch := detectArch()
 	updateURL := GitHubDownloadURL(version, osName, arch)
 
-	logger.Info("Downloading WPProbe update from: " + updateURL)
+	DefaultLogger.Info("Downloading WPProbe update from: " + updateURL)
 	resp, err := http.Get(updateURL)
 	if err != nil {
-		logger.Error("Failed to download update: " + err.Error())
+		DefaultLogger.Error("Failed to download update: " + err.Error())
 		return err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		logger.Error(fmt.Sprintf("Update not found: %s", updateURL))
+		DefaultLogger.Error(fmt.Sprintf("Update not found: %s", updateURL))
 		return fmt.Errorf("update not found at %s", updateURL)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		logger.Error("Failed to read update response: " + err.Error())
+		DefaultLogger.Error("Failed to read update response: " + err.Error())
 		return err
 	}
 
 	currentExe, err := os.Executable()
 	if err != nil {
-		logger.Error("Failed to determine executable path: " + err.Error())
+		DefaultLogger.Error("Failed to determine executable path: " + err.Error())
 		return err
 	}
 
-	logger.Info("Replacing current binary: " + currentExe)
+	DefaultLogger.Info("Replacing current binary: " + currentExe)
 	tmpFile := currentExe + ".tmp"
 
 	if err := os.WriteFile(tmpFile, body, 0o755); err != nil {
-		logger.Error("Failed to write temp file: " + err.Error())
+		DefaultLogger.Error("Failed to write temp file: " + err.Error())
 		return err
 	}
 
 	if runtime.GOOS == "windows" {
 		if err := os.Remove(currentExe); err != nil {
-			logger.Warning("Failed removing current file (Windows lock issues?). " + err.Error())
+			DefaultLogger.Warning(
+				"Failed removing current file (Windows lock issues?). " + err.Error(),
+			)
 		}
 	}
 
 	if err := os.Rename(tmpFile, currentExe); err != nil {
-		logger.Error("Failed to replace old binary: " + err.Error())
+		DefaultLogger.Error("Failed to replace old binary: " + err.Error())
 		return err
 	}
 
-	logger.Success("Update successful! Restart WPProbe to use the new version.")
+	DefaultLogger.Success("Update successful! Restart WPProbe to use the new version.")
 	exitFunc(0)
 	return nil
 }

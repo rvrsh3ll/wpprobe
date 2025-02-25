@@ -43,7 +43,7 @@ func ScanTargets(opts ScanOptions) {
 	if opts.File != "" {
 		lines, err := utils.ReadLines(opts.File)
 		if err != nil {
-			logger.Error("Failed to read file: " + err.Error())
+			utils.DefaultLogger.Error("Failed to read file: " + err.Error())
 			return
 		}
 		targets = lines
@@ -51,11 +51,15 @@ func ScanTargets(opts ScanOptions) {
 		targets = append(targets, opts.URL)
 	}
 
+	vulnerabilityData, _ := wordfence.LoadVulnerabilities("wordfence_vulnerabilities.json")
+
 	siteThreads := int(math.Max(1, float64(opts.Threads)/float64(len(targets))))
 
 	var progress *utils.ProgressManager
 	if opts.File != "" {
 		progress = utils.NewProgressBar(len(targets), "🔎 Scanning...")
+	} else {
+		progress = utils.NewProgressBar(1, "🔎 Scanning...")
 	}
 
 	var writer utils.WriterInterface
@@ -65,7 +69,6 @@ func ScanTargets(opts ScanOptions) {
 	}
 
 	var wg sync.WaitGroup
-	var mu sync.RWMutex
 	sem := make(chan struct{}, opts.Threads)
 
 	for _, target := range targets {
@@ -75,18 +78,20 @@ func ScanTargets(opts ScanOptions) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			defer func() { _ = recover() }()
+
 			localOpts := opts
 			localOpts.Threads = scanThreads
-			ScanSite(t, localOpts, writer, progress)
-			if progress != nil {
-				mu.Lock()
+
+			ScanSite(t, localOpts, writer, progress, vulnerabilityData)
+
+			if opts.File != "" && progress != nil {
 				progress.Increment()
-				mu.Unlock()
 			}
 		}(target, siteThreads)
 	}
 
 	wg.Wait()
+
 	if progress != nil {
 		progress.Finish()
 	}
@@ -97,32 +102,24 @@ func ScanSite(
 	opts ScanOptions,
 	writer utils.WriterInterface,
 	progress *utils.ProgressManager,
+	vulnerabilityData []wordfence.Vulnerability,
 ) {
 	data, err := utils.GetEmbeddedFile("files/scanned_plugins.json")
 	if err != nil {
-		logger.Error("Failed to load scanned_plugins.json: " + err.Error())
-		if progress != nil {
-			progress.Increment()
-		}
+		utils.DefaultLogger.Error("Failed to load scanned_plugins.json: " + err.Error())
 		return
 	}
 
 	pluginEndpoints, err := LoadPluginEndpointsFromData(data)
 	if err != nil {
-		logger.Error("Failed to parse scanned_plugins.json: " + err.Error())
-		if progress != nil {
-			progress.Increment()
-		}
+		utils.DefaultLogger.Error("Failed to parse scanned_plugins.json: " + err.Error())
 		return
 	}
 
 	endpoints := FetchEndpoints(target)
 	if len(endpoints) == 0 {
 		if opts.File == "" {
-			logger.Warning("No REST endpoints found on " + target)
-		}
-		if progress != nil {
-			progress.Increment()
+			utils.DefaultLogger.Warning("No REST endpoints found on " + target)
 		}
 		return
 	}
@@ -130,10 +127,7 @@ func ScanSite(
 	pluginResult := DetectPlugins(endpoints, pluginEndpoints)
 	if len(pluginResult.Detected) == 0 {
 		if opts.File == "" {
-			logger.Warning("No plugins detected on " + target)
-		}
-		if progress != nil {
-			progress.Increment()
+			utils.DefaultLogger.Warning("No plugins detected on " + target)
 		}
 		if writer != nil {
 			writer.WriteResults(target, []utils.PluginEntry{})
@@ -147,11 +141,9 @@ func ScanSite(
 	var mu sync.Mutex
 	sem := make(chan struct{}, opts.Threads)
 
-	vulnerabilityData, err := wordfence.LoadVulnerabilities("wordfence_vulnerabilities.json")
-	if err != nil {
-		logger.Warning("Failed to load Wordfence JSON: " + err.Error())
-		logger.Info("Run 'wpprobe update-db' to fetch the latest vulnerability database.")
-		logger.Warning("The scan will proceed, but vulnerabilities will not be displayed.")
+	totalTasks := len(pluginResult.Detected)
+	if progress != nil && opts.File == "" {
+		progress.SetTotal(totalTasks)
 	}
 
 	for _, plugin := range pluginResult.Detected {
@@ -201,15 +193,15 @@ func ScanSite(
 			mu.Lock()
 			results[plugin] = version
 			resultsList = append(resultsList, localResultsList...)
+
+			if progress != nil && opts.File == "" {
+				progress.Increment()
+			}
 			mu.Unlock()
 		}(plugin)
 	}
 
 	wg.Wait()
-
-	if progress != nil {
-		progress.Increment()
-	}
 
 	if writer != nil {
 		writer.WriteResults(target, resultsList)
