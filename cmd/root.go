@@ -20,38 +20,27 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 
+	"github.com/Chocapikk/wpprobe/internal/utils"
 	"github.com/spf13/cobra"
 )
 
-func PrintBanner() {
-	banner := `
- __    __  ___  ___           _          
-/ / /\ \ \/ _ \/ _ \_ __ ___ | |__   ___ 
-\ \/  \/ / /_)/ /_)/ '__/ _ \| '_ \ / _ \
- \  /\  / ___/ ___/| | | (_) | |_) |  __/
-  \/  \/\/   \/    |_|  \___/|_.__/ \___|
-                                         
-
-Stealthy WordPress Plugin Scanner - By @Chocapikk
-`
-	fmt.Println(banner)
-}
+var version = "dev"
 
 var rootCmd = &cobra.Command{
-	Use:   "wpprobe",
-	Short: "A fast WordPress plugin enumeration tool",
-	Long: `WPProbe is a high-speed WordPress plugin scanner that detects installed plugins 
-and checks for known vulnerabilities using the Wordfence database.`,
+	Use:     "wpprobe",
+	Short:   "A fast WordPress plugin enumeration tool",
+	Long:    `WPProbe is a high-speed WordPress plugin scanner that detects installed plugins and checks for known vulnerabilities using the Wordfence database.`,
+	Version: version,
 }
 
 func Execute() {
-	PrintBanner()
+	_, isLatest := utils.CheckLatestVersion(version)
+	utils.DefaultLogger.PrintBanner(version, isLatest)
 
 	if err := rootCmd.Execute(); err != nil {
-		fmt.Fprintf(os.Stderr, "❌ Error: %v\n", err)
+		utils.DefaultLogger.Error(err.Error())
 		os.Exit(1)
 	}
 }
@@ -61,4 +50,22 @@ func init() {
 
 	rootCmd.AddCommand(scanCmd)
 	rootCmd.AddCommand(updateCmd)
+	rootCmd.AddCommand(updateDbCmd)
+
+	rootCmd.SetVersionTemplate("WPProbe version {{.Version}}\n")
+
+	rootCmd.SilenceErrors = true
+
+	cobra.OnInitialize(func() {
+		rootCmd.SetFlagErrorFunc(func(cmd *cobra.Command, err error) error {
+			utils.DefaultLogger.Error(err.Error())
+			return err
+		})
+		rootCmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+			if cmd.Parent() == nil {
+				utils.DefaultLogger.Error("Unknown command: " + cmd.Name())
+			}
+			return nil
+		}
+	})
 }

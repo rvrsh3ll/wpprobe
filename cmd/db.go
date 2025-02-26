@@ -17,20 +17,26 @@
 // IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-package utils
+package cmd
 
 import (
-	"embed"
+	"github.com/Chocapikk/wpprobe/internal/wordfence"
+	"github.com/spf13/cobra"
 )
 
-//go:embed files/scanned_plugins.json
-var embeddedFiles embed.FS
+var updateWordfenceFunc = wordfence.UpdateWordfence
 
-func GetEmbeddedFile(filename string) ([]byte, error) {
-	data, err := embeddedFiles.ReadFile(filename)
-	if err != nil {
-		DefaultLogger.Error("Failed to read embedded file: " + err.Error())
-		return nil, err
+func runUpdateWordfence(cmd *cobra.Command, args []string) error {
+	if err := updateWordfenceFunc(); err != nil {
+		cmd.PrintErrf("Failed to update Wordfence database: %v\n", err)
+		return err
 	}
-	return data, nil
+	return nil
+}
+
+var updateDbCmd = &cobra.Command{
+	Use:   "update-db",
+	Short: "Update the Wordfence vulnerability database",
+	Long:  "Fetches the latest Wordfence vulnerability database and updates the local JSON file.",
+	RunE:  runUpdateWordfence,
 }
