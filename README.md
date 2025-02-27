@@ -135,15 +135,14 @@ Save scan results to a JSON file:
 ### **CSV Format**  
 
 ```
-URL,Plugin,Version,Severity,AuthType,CVEs,Title
-http://localhost:5555,give,2.20.1,critical,Unauth,CVE-2025-22777,Critical Unauthenticated PHP Object Injection
-http://localhost:5555,give,2.20.1,critical,Unauth,CVE-2024-9634,PHP Object Injection to Remote Code Execution
-http://localhost:5555,give,2.20.1,high,Unauth,CVE-2023-22719,Unauthenticated CSV Injection
-http://localhost:5555,give,2.20.1,medium,Auth,CVE-2024-1957,Stored Cross-Site Scripting via Shortcode
-http://localhost:5555,give,2.20.1,medium,Unknown,CVE-2023-25450,Cross-Site Request Forgery via give_cache_flush
-http://localhost:5555,jetpack,14.3,None,N/A,,No vulnerabilities found
-http://localhost:5555,io-plus,2.0.4,None,N/A,,No vulnerabilities found
-http://localhost:5555,woocommerce,9.6.0,None,N/A,,No vulnerabilities found
+URL,Plugin,Version,Severity,AuthType,CVEs,CVE Links,CVSS Score,CVSS Vector,Title
+http://localhost:5555,give,2.20.1,critical,Unauth,CVE-2025-22777,https://www.cve.org/CVERecord?id=CVE-2025-22777,9.8,CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H,GiveWP <= 3.19.3 - Unauthenticated PHP Object Injection
+http://localhost:5555,give,2.20.1,high,Privileged,CVE-2024-9130,https://www.cve.org/CVERecord?id=CVE-2024-9130,7.2,CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H,GiveWP <= 3.16.1 - Authenticated SQL Injection
+http://localhost:5555,give,2.20.1,medium,Auth,CVE-2024-1957,https://www.cve.org/CVERecord?id=CVE-2024-1957,6.4,CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:L/A:N,GiveWP <= 3.6.1 - Stored XSS via Shortcode
+http://localhost:5555,give,2.20.1,medium,Unauth,CVE-2024-47315,https://www.cve.org/CVERecord?id=CVE-2024-47315,4.3,CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N,GiveWP <= 3.15.1 - Cross-Site Request Forgery
+http://localhost:5555,give,2.20.1,medium,Privileged,CVE-2022-28700,https://www.cve.org/CVERecord?id=CVE-2022-28700,5.5,CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:L/I:H/A:N,GiveWP <= 2.20.2 - Authenticated Arbitrary File Creation
+http://localhost:5555,jetpack,14.3,,,,,,,No vulnerabilities found
+http://localhost:5555,woocommerce,9.6.0,,,,,,,No vulnerabilities found
 ```
 
 ### **JSON Format**  
@@ -159,13 +158,43 @@ http://localhost:5555,woocommerce,9.6.0,None,N/A,,No vulnerabilities found
           "critical": [
             {
               "auth_type": "Unauth",
-              "cves": ["CVE-2025-22777", "CVE-2024-9634"]
+              "vulnerabilities": [
+                {
+                  "cve": "CVE-2025-22777",
+                  "cve_link": "https://www.cve.org/CVERecord?id=CVE-2025-22777",
+                  "cvss_score": 9.8,
+                  "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                  "title": "GiveWP <= 3.19.3 - Unauthenticated PHP Object Injection"
+                }
+              ]
+            }
+          ],
+          "high": [
+            {
+              "auth_type": "Privileged",
+              "vulnerabilities": [
+                {
+                  "cve": "CVE-2024-9130",
+                  "cve_link": "https://www.cve.org/CVERecord?id=CVE-2024-9130",
+                  "cvss_score": 7.2,
+                  "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H",
+                  "title": "GiveWP <= 3.16.1 - Authenticated SQL Injection"
+                }
+              ]
             }
           ],
           "medium": [
             {
               "auth_type": "Auth",
-              "cves": ["CVE-2024-1957", "CVE-2022-40211"]
+              "vulnerabilities": [
+                {
+                  "cve": "CVE-2024-1957",
+                  "cve_link": "https://www.cve.org/CVERecord?id=CVE-2024-1957",
+                  "cvss_score": 6.4,
+                  "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:L/A:N",
+                  "title": "GiveWP <= 3.6.1 - Stored XSS via Shortcode"
+                }
+              ]
             }
           ]
         }
@@ -174,9 +203,7 @@ http://localhost:5555,woocommerce,9.6.0,None,N/A,,No vulnerabilities found
     "woocommerce": [
       {
         "version": "9.6.0",
-        "severities": {
-          "None": []
-        }
+        "severities": {}
       }
     ]
   }

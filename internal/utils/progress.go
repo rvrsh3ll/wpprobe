@@ -20,6 +20,7 @@
 package utils
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -82,6 +83,15 @@ func (p *ProgressManager) RenderBlank() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	_ = p.bar.RenderBlank()
+}
+
+func (p *ProgressManager) ClearLine() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	fmt.Fprint(os.Stdout, "\r\033[K")
+	time.Sleep(10 * time.Millisecond)
+	os.Stdout.Sync()
 }
 
 func (p *ProgressManager) Write(data []byte) (int, error) {

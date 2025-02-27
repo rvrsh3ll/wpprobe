@@ -40,12 +40,15 @@ type WriterInterface interface {
 }
 
 type PluginEntry struct {
-	Plugin   string   `json:"plugin"`
-	Version  string   `json:"version"`
-	Severity string   `json:"severity"`
-	CVEs     []string `json:"cves"`
-	Title    string   `json:"title"`
-	AuthType string   `json:"auth_type"`
+	Plugin     string   `json:"plugin"`
+	Version    string   `json:"version"`
+	Severity   string   `json:"severity"`
+	CVEs       []string `json:"cves"`
+	CVELinks   []string `json:"cve_link"`
+	Title      string   `json:"title"`
+	AuthType   string   `json:"auth_type"`
+	CVSSScore  float64  `json:"cvss_score"`
+	CVSSVector string   `json:"cvss_vector"`
 }
 
 func authTypeOrder(auth string) int {
@@ -77,7 +80,19 @@ func NewCSVWriter(output string) *CSVWriter {
 	}
 
 	writer := csv.NewWriter(file)
-	header := []string{"URL", "Plugin", "Version", "Severity", "AuthType", "CVEs", "Title"}
+
+	header := []string{
+		"URL",
+		"Plugin",
+		"Version",
+		"Severity",
+		"AuthType",
+		"CVEs",
+		"CVE Links",
+		"CVSS Score",
+		"CVSS Vector",
+		"Title",
+	}
 	_ = writer.Write(header)
 	writer.Flush()
 
@@ -88,6 +103,7 @@ func (c *CSVWriter) WriteResults(url string, results []PluginEntry) {
 	sort.Slice(results, func(i, j int) bool {
 		return authTypeOrder(results[i].AuthType) < authTypeOrder(results[j].AuthType)
 	})
+
 	for _, entry := range results {
 		row := []string{
 			url,
@@ -96,6 +112,9 @@ func (c *CSVWriter) WriteResults(url string, results []PluginEntry) {
 			entry.Severity,
 			entry.AuthType,
 			strings.Join(entry.CVEs, ", "),
+			strings.Join(entry.CVELinks, ", "),
+			fmt.Sprintf("%.1f", entry.CVSSScore),
+			entry.CVSSVector,
 			entry.Title,
 		}
 		_ = c.writer.Write(row)
@@ -137,50 +156,89 @@ func NewJSONWriter(output string) *JSONWriter {
 }
 
 func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
-	groupedResults := make(map[string]map[string]map[string]map[string][]string)
+	groupedResults := make(map[string]map[string]map[string]map[string][]map[string]interface{})
+
 	for _, entry := range results {
 		plugin := entry.Plugin
 		version := entry.Version
 		severity := entry.Severity
 		auth := strings.ToLower(entry.AuthType)
-		if auth != "auth" && auth != "unauth" {
+
+		if auth != "auth" && auth != "unauth" && auth != "privileged" {
 			auth = "unknown"
 		}
 
 		if _, ok := groupedResults[plugin]; !ok {
-			groupedResults[plugin] = make(map[string]map[string]map[string][]string)
+			groupedResults[plugin] = make(map[string]map[string]map[string][]map[string]interface{})
 		}
 		if _, ok := groupedResults[plugin][version]; !ok {
-			groupedResults[plugin][version] = make(map[string]map[string][]string)
+			groupedResults[plugin][version] = make(map[string]map[string][]map[string]interface{})
 		}
 		if _, ok := groupedResults[plugin][version][severity]; !ok {
-			groupedResults[plugin][version][severity] = make(map[string][]string)
+			groupedResults[plugin][version][severity] = make(map[string][]map[string]interface{})
 		}
-		groupedResults[plugin][version][severity][auth] =
-			append(groupedResults[plugin][version][severity][auth], entry.CVEs...)
+
+		for i, cve := range entry.CVEs {
+			cveLink := ""
+			if i < len(entry.CVELinks) {
+				cveLink = entry.CVELinks[i]
+			}
+
+			groupedResults[plugin][version][severity][auth] = append(
+				groupedResults[plugin][version][severity][auth],
+				map[string]interface{}{
+					"cve":         cve,
+					"cve_link":    cveLink,
+					"title":       entry.Title,
+					"cvss_score":  entry.CVSSScore,
+					"cvss_vector": entry.CVSSVector,
+				},
+			)
+		}
 	}
 
 	pluginsFormatted := make(map[string][]map[string]interface{})
-	desiredAuthOrder := []string{"unauth", "auth", "unknown"}
+	desiredAuthOrder := []string{"unauth", "auth", "privileged", "unknown"}
+
 	for plugin, versions := range groupedResults {
 		for version, severities := range versions {
 			formattedSeverities := make(map[string]interface{})
+
 			for severity, authMap := range severities {
 				ordered := make([]map[string]interface{}, 0)
 				for _, a := range desiredAuthOrder {
-					if cves, ok := authMap[a]; ok && len(cves) > 0 {
+					if vulns, ok := authMap[a]; ok && len(vulns) > 0 {
 						ordered = append(ordered, map[string]interface{}{
-							"auth_type": cases.Title(language.Und).String(a),
-							"cves":      cves,
+							"auth_type":       cases.Title(language.Und).String(a),
+							"vulnerabilities": vulns,
 						})
 					}
 				}
-				formattedSeverities[severity] = ordered
+				if len(ordered) > 0 {
+					formattedSeverities[severity] = ordered
+				}
 			}
+
 			pluginsFormatted[plugin] = append(pluginsFormatted[plugin], map[string]interface{}{
 				"version":    version,
 				"severities": formattedSeverities,
 			})
+		}
+	}
+
+	detectedPlugins := make(map[string]bool)
+	for _, entry := range results {
+		detectedPlugins[entry.Plugin] = true
+	}
+
+	for _, entry := range results {
+		if _, exists := pluginsFormatted[entry.Plugin]; !exists {
+			pluginsFormatted[entry.Plugin] = []map[string]interface{}{
+				{
+					"version":    "unknown",
+					"severities": map[string]interface{}{},
+				},
+			}
 		}
 	}
 

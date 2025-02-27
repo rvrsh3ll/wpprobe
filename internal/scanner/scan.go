@@ -172,20 +172,22 @@ func ScanSite(
 				localResultsList = append(localResultsList, utils.PluginEntry{
 					Plugin:   plugin,
 					Version:  version,
-					Severity: "None",
 					CVEs:     []string{},
+					CVELinks: []string{},
 					Title:    "No vulnerabilities found",
-					AuthType: "N/A",
 				})
 			} else {
 				for _, v := range vulns {
 					localResultsList = append(localResultsList, utils.PluginEntry{
-						Plugin:   plugin,
-						Version:  version,
-						Severity: v.Severity,
-						CVEs:     []string{v.CVE},
-						Title:    v.Title,
-						AuthType: v.AuthType,
+						Plugin:     plugin,
+						Version:    version,
+						Severity:   v.Severity,
+						CVEs:       []string{v.CVE},
+						CVELinks:   []string{v.CVELink},
+						Title:      v.Title,
+						AuthType:   v.AuthType,
+						CVSSScore:  v.CVSSScore,
+						CVSSVector: v.CVSSVector,
 					})
 				}
 			}

@@ -114,7 +114,8 @@ func Test_sortedPluginsByConfidence(t *testing.T) {
 	}
 
 	got := sortedPluginsByConfidence(argsDetected, argsConfidence, argsVulns)
-	want := []string{"pluginB", "pluginA", "pluginC"}
+
+	want := []string{"pluginA", "pluginC", "pluginB"}
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("sortedPluginsByConfidence() = %v, want %v", got, want)

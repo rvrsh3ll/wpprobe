@@ -47,9 +47,10 @@ var (
 			Padding(0, 2).
 			Margin(1, 0)
 
-	unauthStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF0000"))
-	authStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00FF00"))
-	unknownStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA500"))
+	unauthStyle     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF0000"))
+	authStyle       = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00FF00"))
+	privilegedStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#8A2BE2"))
+	unknownStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA500"))
 )
 
 type VulnCategories struct {
@@ -93,10 +94,12 @@ func buildPluginAuthGroups(
 		if _, ok := pluginAuthGroups[entry.Plugin][severity]; !ok {
 			pluginAuthGroups[entry.Plugin][severity] = make(map[string][]string)
 		}
+
 		authKey := strings.ToLower(entry.AuthType)
-		if authKey != "auth" && authKey != "unauth" {
+		if authKey != "auth" && authKey != "unauth" && authKey != "privileged" {
 			authKey = "unknown"
 		}
+
 		if len(entry.CVEs) > 0 {
 			pluginAuthGroups[entry.Plugin][severity][authKey] = append(
 				pluginAuthGroups[entry.Plugin][severity][authKey],
@@ -179,7 +182,7 @@ func DisplayResults(
 			for _, severity := range vulnTypes {
 				if groups, ok := authGroups[severity]; ok {
 					severityNode := tree.Root(vulnStyles[severity].Render(severity))
-					for _, key := range []string{"unauth", "auth", "unknown"} {
+					for _, key := range []string{"unauth", "auth", "privileged", "unknown"} {
 						if cves, ok := groups[key]; ok && len(cves) > 0 {
 							var label string
 							switch key {
@@ -187,6 +190,8 @@ func DisplayResults(
 								label = unauthStyle.Render("Unauth")
 							case "auth":
 								label = authStyle.Render("Auth")
+							case "privileged":
+								label = privilegedStyle.Render("Privileged")
 							default:
 								label = unknownStyle.Render("Unknown")
 							}
@@ -231,41 +236,79 @@ func sortedPluginsByConfidence(
 	pluginVulns map[string]VulnCategories,
 ) []string {
 	type PluginData struct {
-		name       string
-		confidence float64
-		noVersion  bool
-		hasVuln    bool
+		name        string
+		confidence  float64
+		noVersion   bool
+		hasCritical bool
+		hasHigh     bool
+		hasMedium   bool
+		hasLow      bool
+		hasVuln     bool
 	}
 	plugins := make([]PluginData, 0, len(detectedPlugins))
+
 	for plugin, version := range detectedPlugins {
 		noVersion := version == "unknown"
 		vulns := pluginVulns[plugin]
-		hasVuln := len(vulns.Critical) > 0 || len(vulns.High) > 0 || len(vulns.Medium) > 0 ||
-			len(vulns.Low) > 0
+
+		hasCritical := len(vulns.Critical) > 0
+		hasHigh := len(vulns.High) > 0
+		hasMedium := len(vulns.Medium) > 0
+		hasLow := len(vulns.Low) > 0
+		hasVuln := hasCritical || hasHigh || hasMedium || hasLow
+
 		plugins = append(plugins, PluginData{
-			name:       plugin,
-			confidence: pluginConfidence[plugin],
-			noVersion:  noVersion,
-			hasVuln:    hasVuln,
+			name:        plugin,
+			confidence:  pluginConfidence[plugin],
+			noVersion:   noVersion,
+			hasCritical: hasCritical,
+			hasHigh:     hasHigh,
+			hasMedium:   hasMedium,
+			hasLow:      hasLow,
+			hasVuln:     hasVuln,
 		})
 	}
 
 	sort.Slice(plugins, func(i, j int) bool {
-		if !plugins[i].hasVuln && plugins[j].hasVuln {
+		if plugins[i].hasCritical && !plugins[j].hasCritical {
 			return true
 		}
-		if plugins[i].hasVuln && !plugins[j].hasVuln {
+		if !plugins[i].hasCritical && plugins[j].hasCritical {
 			return false
 		}
+
+		if plugins[i].hasHigh && !plugins[j].hasHigh {
+			return true
+		}
+		if !plugins[i].hasHigh && plugins[j].hasHigh {
+			return false
+		}
+
+		if plugins[i].hasMedium && !plugins[j].hasMedium {
+			return true
+		}
+		if !plugins[i].hasMedium && plugins[j].hasMedium {
+			return false
+		}
+
+		if plugins[i].hasLow && !plugins[j].hasLow {
+			return true
+		}
+		if !plugins[i].hasLow && plugins[j].hasLow {
+			return false
+		}
+
+		if !plugins[i].noVersion && plugins[j].noVersion {
+			return true
+		}
+		if plugins[i].noVersion && !plugins[j].noVersion {
+			return false
+		}
+
 		if plugins[i].confidence != plugins[j].confidence {
 			return plugins[i].confidence > plugins[j].confidence
 		}
-		if plugins[i].noVersion && !plugins[j].noVersion {
-			return true
-		}
-		if !plugins[i].noVersion && plugins[j].noVersion {
-			return false
-		}
+
 		return plugins[i].name < plugins[j].name
 	})
 

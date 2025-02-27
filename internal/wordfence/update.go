@@ -38,18 +38,20 @@ var (
 const wordfenceAPI = "https://www.wordfence.com/api/intelligence/v2/vulnerabilities/production"
 
 type Vulnerability struct {
-	Title           string `json:"title"`
-	Slug            string `json:"slug"`
-	SoftwareType    string `json:"type"`
-	AffectedVersion string `json:"affected_version"`
-	FromVersion     string `json:"from_version"`
-	FromInclusive   bool   `json:"from_inclusive"`
-	ToVersion       string `json:"to_version"`
-	ToInclusive     bool   `json:"to_inclusive"`
-	Severity        string `json:"severity"`
-	CVE             string `json:"cve"`
-	CVELink         string `json:"cve_link"`
-	AuthType        string `json:"auth_type"`
+	Title           string  `json:"title"`
+	Slug            string  `json:"slug"`
+	SoftwareType    string  `json:"type"`
+	AffectedVersion string  `json:"affected_version"`
+	FromVersion     string  `json:"from_version"`
+	FromInclusive   bool    `json:"from_inclusive"`
+	ToVersion       string  `json:"to_version"`
+	ToInclusive     bool    `json:"to_inclusive"`
+	Severity        string  `json:"severity"`
+	CVE             string  `json:"cve"`
+	CVELink         string  `json:"cve_link"`
+	AuthType        string  `json:"auth_type"`
+	CVSSScore       float64 `json:"cvss_score"`
+	CVSSVector      string  `json:"cvss_vector"`
 }
 
 func UpdateWordfence() error {
@@ -129,12 +131,42 @@ func processWordfenceData(wfData map[string]interface{}) []Vulnerability {
 		}
 
 		title, _ := vulnMap["title"].(string)
-		authType := "Unknown"
-		lowerTitle := strings.ToLower(title)
-		if strings.Contains(lowerTitle, "unauth") {
-			authType = "Unauth"
-		} else if strings.Contains(lowerTitle, "auth") {
-			authType = "Auth"
+		authType := ""
+
+		var cvssScore float64
+		var cvssVector, cvssRating string
+		if cvss, ok := vulnMap["cvss"].(map[string]interface{}); ok {
+			if score, exists := cvss["score"].(float64); exists {
+				cvssScore = score
+			}
+			if vector, exists := cvss["vector"].(string); exists {
+				cvssVector = vector
+			}
+			if rating, exists := cvss["rating"].(string); exists {
+				cvssRating = strings.ToLower(rating)
+			}
+		}
+
+		if cvssVector != "" {
+			switch {
+			case strings.Contains(cvssVector, "PR:N"):
+				authType = "Unauth"
+			case strings.Contains(cvssVector, "PR:L"):
+				authType = "Auth"
+			case strings.Contains(cvssVector, "PR:H"):
+				authType = "Privileged"
+			}
+		}
+
+		if authType == "" {
+			lowerTitle := strings.ToLower(title)
+			if strings.Contains(lowerTitle, "unauth") {
+				authType = "Unauth"
+			} else if strings.Contains(lowerTitle, "auth") {
+				authType = "Auth"
+			} else {
+				authType = "Unknown"
+			}
 		}
 
 		for _, software := range vulnMap["software"].([]interface{}) {
@@ -183,12 +215,12 @@ func processWordfenceData(wfData map[string]interface{}) []Vulnerability {
 					FromInclusive:   affectedVersion["from_inclusive"].(bool),
 					ToVersion:       toVersion,
 					ToInclusive:     affectedVersion["to_inclusive"].(bool),
-					Severity: strings.ToLower(
-						vulnMap["cvss"].(map[string]interface{})["rating"].(string),
-					),
-					CVE:      cve,
-					CVELink:  cveLink,
-					AuthType: authType,
+					Severity:        cvssRating,
+					CVE:             cve,
+					CVELink:         cveLink,
+					AuthType:        authType,
+					CVSSScore:       cvssScore,
+					CVSSVector:      cvssVector,
 				}
 
 				vulnerabilities = append(vulnerabilities, vuln)
