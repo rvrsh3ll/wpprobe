@@ -20,16 +20,18 @@
 package cmd
 
 import (
-	"github.com/Chocapikk/wpprobe/internal/wordfence"
-
+	"github.com/Chocapikk/wpprobe/internal/utils"
 	"github.com/spf13/cobra"
 )
 
 var updateCmd = &cobra.Command{
 	Use:   "update",
-	Short: "Update the Wordfence vulnerability database",
-	Long:  "Fetches the latest Wordfence vulnerability database and updates the local JSON file.",
+	Short: "Update WPProbe to the latest version",
 	Run: func(cmd *cobra.Command, args []string) {
-		wordfence.UpdateWordfence()
+		if err := utils.AutoUpdate(); err != nil {
+			utils.DefaultLogger.Error("Update failed: " + err.Error())
+		} else {
+			utils.DefaultLogger.Success("Update completed successfully!")
+		}
 	},
 }

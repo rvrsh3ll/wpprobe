@@ -23,57 +23,88 @@ import (
 	"crypto/tls"
 	"errors"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/corpix/uarand"
-	"github.com/go-resty/resty/v2"
 )
 
 const maxResponseSizeMB = 20
 
 var maxResponseSize = maxResponseSizeMB * 1024 * 1024
 
+const maxRedirects = 10
+
 type HTTPClientManager struct {
-	client *resty.Client
+	client    *http.Client
+	userAgent string
 }
 
-type SilentLogger struct{}
-
-func (s *SilentLogger) Printf(string, ...interface{}) {}
-func (s *SilentLogger) Debugf(string, ...interface{}) {}
-func (s *SilentLogger) Errorf(string, ...interface{}) {}
-func (s *SilentLogger) Warnf(string, ...interface{})  {}
-
 func NewHTTPClient(timeout time.Duration) *HTTPClientManager {
-	client := resty.New().
-		SetTimeout(timeout).
-		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		SetRedirectPolicy(resty.NoRedirectPolicy()).
-		SetRetryCount(2).
-		SetLogger(&SilentLogger{})
+	transport := &http.Transport{
+		TLSClientConfig:   &tls.Config{InsecureSkipVerify: true},
+		DisableKeepAlives: true,
+	}
 
-	client.OnBeforeRequest(func(c *resty.Client, r *resty.Request) error {
-		r.SetHeader("User-Agent", uarand.GetRandom())
-		return nil
-	})
+	client := &http.Client{
+		Timeout:   timeout,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= maxRedirects {
+				return errors.New("stopped after max redirects")
+			}
+			return nil
+		},
+	}
 
-	return &HTTPClientManager{client: client}
+	return &HTTPClientManager{
+		client:    client,
+		userAgent: uarand.GetRandom(),
+	}
 }
 
 func (h *HTTPClientManager) Get(url string) (string, error) {
-	resp, err := h.client.R().SetDoNotParseResponse(true).Get(url)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
-		return "", err
+		return "", errors.New("failed to create request: " + err.Error())
 	}
-	if resp == nil || resp.RawBody() == nil {
-		return "", errors.New("empty response")
-	}
-	defer resp.RawBody().Close()
 
-	limited := io.LimitReader(resp.RawBody(), int64(maxResponseSize))
+	req.Header.Set("User-Agent", h.userAgent)
+
+	resp, err := h.client.Do(req)
+	if err != nil {
+		return "", errors.New("request failed: " + err.Error())
+	}
+	defer resp.Body.Close()
+
+	redirects := 0
+	for resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		if redirects >= maxRedirects {
+			return "", errors.New("stopped after max redirects")
+		}
+		location, err := resp.Location()
+		if err != nil {
+			return "", errors.New("failed to get redirect location")
+		}
+		resp, err = h.client.Get(location.String())
+		if err != nil {
+			return "", errors.New("redirect request failed: " + err.Error())
+		}
+		redirects++
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", errors.New("non-success status code: " + resp.Status)
+	}
+
+	limited := io.LimitReader(resp.Body, int64(maxResponseSize))
 	data, err := io.ReadAll(limited)
 	if err != nil {
-		return "", err
+		return "", errors.New("failed to read response body: " + err.Error())
+	}
+
+	if len(data) == 0 {
+		return "", errors.New("empty response")
 	}
 
 	if len(data) >= maxResponseSize {

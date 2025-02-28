@@ -23,8 +23,11 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/goccy/go-json"
 	"math"
+
+	"encoding/json"
+
+	"github.com/Chocapikk/wpprobe/internal/utils"
 )
 
 type PluginDetectionResult struct {
@@ -51,13 +54,17 @@ func LoadPluginEndpointsFromData(data []byte) (map[string][]string, error) {
 	}
 
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("❌ Error reading embedded JSONL data: %v", err)
+		utils.DefaultLogger.Error("Error reading embedded JSONL data: " + err.Error())
+		return nil, err
 	}
 
 	return pluginEndpoints, nil
 }
 
-func DetectPlugins(detectedEndpoints []string, pluginEndpoints map[string][]string) PluginDetectionResult {
+func DetectPlugins(
+	detectedEndpoints []string,
+	pluginEndpoints map[string][]string,
+) PluginDetectionResult {
 	pluginScores := make(map[string]int)
 	pluginConfidence := make(map[string]float64)
 	pluginAmbiguity := make(map[string]bool)
@@ -105,6 +112,10 @@ func DetectPlugins(detectedEndpoints []string, pluginEndpoints map[string][]stri
 	for _, plugin := range detectedPlugins {
 		key := pluginEndpointsMap[plugin]
 		matches[plugin] = ambiguousGroups[key]
+	}
+
+	if detectedPlugins == nil {
+		detectedPlugins = []string{}
 	}
 
 	return PluginDetectionResult{

@@ -8,11 +8,10 @@ require (
 	github.com/Masterminds/semver v1.5.0
 	github.com/charmbracelet/lipgloss v1.0.0
 	github.com/corpix/uarand v0.2.0
-	github.com/go-resty/resty/v2 v2.16.5
-	github.com/goccy/go-json v0.10.5
 	github.com/k0kubun/go-ansi v0.0.0-20180517002512-3bf9e2903213
 	github.com/schollz/progressbar/v3 v3.18.0
 	github.com/spf13/cobra v1.8.1
+	golang.org/x/text v0.21.0
 )
 
 require (
@@ -26,7 +25,6 @@ require (
 	github.com/muesli/termenv v0.15.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/net v0.33.0 // indirect
-	golang.org/x/sys v0.29.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/term v0.28.0 // indirect
 )

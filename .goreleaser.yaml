@@ -1,0 +1,59 @@
+version: 2
+project_name: wpprobe
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: wpprobe
+    main: ./main.go
+    binary: "wpprobe"
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+      - freebsd
+      - openbsd
+      - netbsd
+    goarch:
+      - amd64
+      - arm64
+      - 386
+    goarm:
+      - 6
+      - 7
+    ldflags:
+      - "-s -w -X github.com/Chocapikk/wpprobe/cmd.version=v{{ .Version }}"
+
+  - id: wpprobe-android
+    main: ./main.go
+    binary: "wpprobe"
+    env:
+      - CGO_ENABLED=1
+      - CC=$HOME/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang
+      - CXX=$HOME/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++
+    goos:
+      - android
+    goarch:
+      - arm64
+    goarm:
+      - 6
+      - 7
+    ldflags:
+      - "-s -w -X github.com/Chocapikk/wpprobe/cmd.version=v{{ .Version }}"
+
+archives:
+  - id: custom
+    formats: binary
+    name_template: "{{ .ProjectName }}_v{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    allow_different_binary_count: true
+
+
+release:
+  name_template: "WPProbe v{{ .Version }}"
+  github:
+    owner: Chocapikk
+    name: wpprobe

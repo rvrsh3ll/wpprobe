@@ -6,13 +6,17 @@
 
 ![WPProbe](./images/wpprobe.png)
 
+[![Go CI](https://github.com/Chocapikk/wpprobe/actions/workflows/go.yml/badge.svg?branch=main)](https://github.com/Chocapikk/wpprobe/actions/workflows/go.yml)
+[![Latest Release](https://img.shields.io/github/v/release/Chocapikk/wpprobe)](https://github.com/Chocapikk/wpprobe/releases/latest)
+
+
 ## 🧐 What is WPProbe?  
 
 **WPProbe** is a **fast and efficient WordPress plugin scanner** that leverages **REST API enumeration (`?rest_route`)** to detect installed plugins **without brute-force**.  
 
 Unlike traditional scanners that hammer websites with requests, WPProbe takes a smarter approach by querying the exposed REST API. This technique allows us to **identify plugins stealthily**, reducing detection risks and **speeding up the scan process**.  
 
-📌 **Currently, over 900 plugins** can be identified using this method!  
+📌 **Currently, over 2200 plugins** can be identified using this method!  
 
 ---
 
@@ -88,27 +92,38 @@ go install github.com/Chocapikk/wpprobe@latest
 
 ## 🕵️ Usage  
 
-**Update the local Wordfence DB first:**  
+### **🔄 Update WPProbe**  
+Update WPProbe to the latest version:  
 ```bash
 ./wpprobe update
 ```
 
-**Basic scan for a single website:**  
+### **Update the Wordfence database**  
+Update the local Wordfence vulnerability database:  
+```bash
+./wpprobe update-db
+```
+
+### **Basic scan for a single website**  
+Scan a single WordPress site:  
 ```bash
 ./wpprobe scan -u https://example.com
 ```
 
-**Scan multiple targets from a file with 20 concurrent threads:**  
+### **Scan multiple targets from a file with 20 concurrent threads**  
+Scan multiple sites from a `targets.txt` file using 20 threads:  
 ```bash
 ./wpprobe scan -f targets.txt -t 20
 ```
 
-**Save results to a CSV file:**  
+### **Save results to a CSV file**  
+Save scan results to a CSV file:  
 ```bash
 ./wpprobe scan -f targets.txt -t 20 -o results.csv
 ```
 
-**Save results to a JSON file:**  
+**Save results to a JSON File**  
+Save scan results to a JSON file:  
 ```bash
 ./wpprobe scan -f targets.txt -t 20 -o results.json
 ```
@@ -120,47 +135,78 @@ go install github.com/Chocapikk/wpprobe@latest
 ### **CSV Format**  
 
 ```
-URL,Plugin,Version,Severity,CVEs
-https://example.com,elementor,3.11.2,High,"CVE-2023-48777, CVE-2024-24934"
-https://example.com,wordpress-seo,19.12,Medium,"CVE-2023-40680, CVE-2024-4984, CVE-2024-4041"
-https://example.com,woocommerce,7.4.0,Medium,"CVE-2023-47777, CVE-2024-39666, CVE-2024-9944"
+URL,Plugin,Version,Severity,AuthType,CVEs,CVE Links,CVSS Score,CVSS Vector,Title
+http://localhost:5555,give,2.20.1,critical,Unauth,CVE-2025-22777,https://www.cve.org/CVERecord?id=CVE-2025-22777,9.8,CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H,GiveWP <= 3.19.3 - Unauthenticated PHP Object Injection
+http://localhost:5555,give,2.20.1,high,Privileged,CVE-2024-9130,https://www.cve.org/CVERecord?id=CVE-2024-9130,7.2,CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H,GiveWP <= 3.16.1 - Authenticated SQL Injection
+http://localhost:5555,give,2.20.1,medium,Auth,CVE-2024-1957,https://www.cve.org/CVERecord?id=CVE-2024-1957,6.4,CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:L/A:N,GiveWP <= 3.6.1 - Stored XSS via Shortcode
+http://localhost:5555,give,2.20.1,medium,Unauth,CVE-2024-47315,https://www.cve.org/CVERecord?id=CVE-2024-47315,4.3,CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:N/I:L/A:N,GiveWP <= 3.15.1 - Cross-Site Request Forgery
+http://localhost:5555,give,2.20.1,medium,Privileged,CVE-2022-28700,https://www.cve.org/CVERecord?id=CVE-2022-28700,5.5,CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:L/I:H/A:N,GiveWP <= 2.20.2 - Authenticated Arbitrary File Creation
+http://localhost:5555,jetpack,14.3,,,,,,,No vulnerabilities found
+http://localhost:5555,woocommerce,9.6.0,,,,,,,No vulnerabilities found
 ```
 
 ### **JSON Format**  
 
 ```json
 {
+  "url": "http://localhost:5555",
   "plugins": {
-    "contact-form-7": [
+    "give": [
       {
+        "version": "2.20.1",
         "severities": {
+          "critical": [
+            {
+              "auth_type": "Unauth",
+              "vulnerabilities": [
+                {
+                  "cve": "CVE-2025-22777",
+                  "cve_link": "https://www.cve.org/CVERecord?id=CVE-2025-22777",
+                  "cvss_score": 9.8,
+                  "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+                  "title": "GiveWP <= 3.19.3 - Unauthenticated PHP Object Injection"
+                }
+              ]
+            }
+          ],
+          "high": [
+            {
+              "auth_type": "Privileged",
+              "vulnerabilities": [
+                {
+                  "cve": "CVE-2024-9130",
+                  "cve_link": "https://www.cve.org/CVERecord?id=CVE-2024-9130",
+                  "cvss_score": 7.2,
+                  "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H",
+                  "title": "GiveWP <= 3.16.1 - Authenticated SQL Injection"
+                }
+              ]
+            }
+          ],
           "medium": [
-            "CVE-2023-6449",
-            "CVE-2024-4704",
-            "CVE-2024-2242"
+            {
+              "auth_type": "Auth",
+              "vulnerabilities": [
+                {
+                  "cve": "CVE-2024-1957",
+                  "cve_link": "https://www.cve.org/CVERecord?id=CVE-2024-1957",
+                  "cvss_score": 6.4,
+                  "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:C/C:L/I:L/A:N",
+                  "title": "GiveWP <= 3.6.1 - Stored XSS via Shortcode"
+                }
+              ]
+            }
           ]
-        },
-        "version": "5.4.2"
+        }
       }
     ],
-    "wordpress-seo": [
+    "woocommerce": [
       {
-        "severities": {
-          "medium": [
-            "CVE-2019-13478",
-            "CVE-2018-19370",
-            "CVE-2017-16842",
-            "CVE-2023-40680",
-            "CVE-2024-4041",
-            "CVE-2024-4984",
-            "CVE-2021-25118"
-          ]
-        },
-        "version": "4.10.8"
+        "version": "9.6.0",
+        "severities": {}
       }
     ]
-  },
-  "url": "https://example.com"
+  }
 }
 ```
 
@@ -170,7 +216,7 @@ https://example.com,woocommerce,7.4.0,Medium,"CVE-2023-47777, CVE-2024-39666, CV
 
 💡 **The idea behind WPProbe** comes from the realization that **WordPress exposes plugin data through its REST API (`?rest_route`)**. Instead of wasting time brute-forcing plugin paths, this tool **matches REST endpoints with known plugin signatures**, allowing for faster and more stealthy scans.  
 
-**Over 900 plugins** are currently detectable using this method, making WPProbe one of the most effective tools for WordPress reconnaissance.  
+**Over 2200 plugins** are currently detectable using this method, making WPProbe one of the most effective tools for WordPress reconnaissance.  
 
 ---
 

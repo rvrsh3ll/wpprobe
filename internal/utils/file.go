@@ -23,11 +23,16 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
-	"github.com/goccy/go-json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
+	"sync"
+
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type WriterInterface interface {
@@ -36,40 +41,87 @@ type WriterInterface interface {
 }
 
 type PluginEntry struct {
-	Plugin   string   `json:"plugin"`
-	Version  string   `json:"version"`
-	Severity string   `json:"severity"`
-	CVEs     []string `json:"cves"`
+	Plugin     string   `json:"plugin"`
+	Version    string   `json:"version"`
+	Severity   string   `json:"severity"`
+	CVEs       []string `json:"cves"`
+	CVELinks   []string `json:"cve_link"`
+	Title      string   `json:"title"`
+	AuthType   string   `json:"auth_type"`
+	CVSSScore  float64  `json:"cvss_score"`
+	CVSSVector string   `json:"cvss_vector"`
 }
+
+func authTypeOrder(auth string) int {
+	a := strings.ToLower(auth)
+	switch a {
+	case "unauth":
+		return 0
+	case "auth":
+		return 1
+	default:
+		return 2
+	}
+}
+
+//////////////////////////////
+// CSV Writer Implementation
+//////////////////////////////
 
 type CSVWriter struct {
 	file   *os.File
 	writer *csv.Writer
+	mu     sync.Mutex
 }
 
-func NewCSVWriter(output string) *CSVWriter {
-	file, err := os.Create(output)
+func NewCSVWriter(filename string) *CSVWriter {
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
-		fmt.Printf("❌ Failed to create CSV file: %v\n", err)
-		return nil
+		DefaultLogger.Error("Failed to open CSV file: " + err.Error())
 	}
 
 	writer := csv.NewWriter(file)
-	header := []string{"URL", "Plugin", "Version", "Severity", "CVEs"}
+	header := []string{
+		"URL",
+		"Plugin",
+		"Version",
+		"Severity",
+		"AuthType",
+		"CVEs",
+		"CVE Links",
+		"CVSS Score",
+		"CVSS Vector",
+		"Title",
+	}
 	_ = writer.Write(header)
 	writer.Flush()
 
-	return &CSVWriter{file: file, writer: writer}
+	return &CSVWriter{
+		file:   file,
+		writer: writer,
+	}
 }
 
 func (c *CSVWriter) WriteResults(url string, results []PluginEntry) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	sort.Slice(results, func(i, j int) bool {
+		return authTypeOrder(results[i].AuthType) < authTypeOrder(results[j].AuthType)
+	})
+
 	for _, entry := range results {
 		row := []string{
 			url,
 			entry.Plugin,
 			entry.Version,
 			entry.Severity,
+			entry.AuthType,
 			strings.Join(entry.CVEs, ", "),
+			strings.Join(entry.CVELinks, ", "),
+			fmt.Sprintf("%.1f", entry.CVSSScore),
+			entry.CVSSVector,
+			entry.Title,
 		}
 		_ = c.writer.Write(row)
 	}
@@ -77,69 +129,142 @@ func (c *CSVWriter) WriteResults(url string, results []PluginEntry) {
 }
 
 func (c *CSVWriter) Close() {
-	if c.file != nil {
-		c.writer.Flush()
-		_ = c.file.Close()
-	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.writer.Flush()
+	_ = c.file.Close()
 }
+
+//////////////////////////////
+// JSON Writer Implementation
+//////////////////////////////
 
 type JSONWriter struct {
 	file    *os.File
 	encoder *json.Encoder
+	mu      sync.Mutex
 	first   bool
 }
 
 func NewJSONWriter(output string) *JSONWriter {
-	file, err := os.Create(output)
+	file, err := os.OpenFile(output, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Printf("❌ Failed to create JSON file: %v\n", err)
+		DefaultLogger.Error("Failed to open JSON file: " + err.Error())
 		os.Exit(1)
 	}
 
-	writer := &JSONWriter{
-		file:    file,
-		encoder: json.NewEncoder(file),
-		first:   true,
-	}
-
-	return writer
+	return &JSONWriter{file: file, encoder: json.NewEncoder(file)}
 }
 
 func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
-	groupedResults := make(map[string]map[string]map[string][]string)
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
+	groupedResults := make(map[string]map[string]map[string]map[string][]map[string]interface{})
 
 	for _, entry := range results {
-		if _, exists := groupedResults[entry.Plugin]; !exists {
-			groupedResults[entry.Plugin] = make(map[string]map[string][]string)
+		plugin := entry.Plugin
+		version := entry.Version
+		severity := entry.Severity
+		auth := strings.ToLower(entry.AuthType)
+
+		if auth != "auth" && auth != "unauth" && auth != "privileged" {
+			auth = "unknown"
 		}
-		if _, exists := groupedResults[entry.Plugin][entry.Version]; !exists {
-			groupedResults[entry.Plugin][entry.Version] = make(map[string][]string)
+
+		if _, ok := groupedResults[plugin]; !ok {
+			groupedResults[plugin] = make(map[string]map[string]map[string][]map[string]interface{})
 		}
-		groupedResults[entry.Plugin][entry.Version][entry.Severity] = append(groupedResults[entry.Plugin][entry.Version][entry.Severity], entry.CVEs...)
+		if _, ok := groupedResults[plugin][version]; !ok {
+			groupedResults[plugin][version] = make(map[string]map[string][]map[string]interface{})
+		}
+		if severity != "" && severity != "N/A" {
+			if _, ok := groupedResults[plugin][version][severity]; !ok {
+				groupedResults[plugin][version][severity] = make(
+					map[string][]map[string]interface{},
+				)
+			}
+
+			for i, cve := range entry.CVEs {
+				cveLink := ""
+				if i < len(entry.CVELinks) {
+					cveLink = entry.CVELinks[i]
+				}
+
+				groupedResults[plugin][version][severity][auth] = append(
+					groupedResults[plugin][version][severity][auth],
+					map[string]interface{}{
+						"cve":         cve,
+						"cve_link":    cveLink,
+						"title":       entry.Title,
+						"cvss_score":  entry.CVSSScore,
+						"cvss_vector": entry.CVSSVector,
+					},
+				)
+			}
+		}
 	}
 
 	pluginsFormatted := make(map[string][]map[string]interface{})
+	desiredAuthOrder := []string{"unauth", "auth", "privileged", "unknown"}
 
 	for plugin, versions := range groupedResults {
 		for version, severities := range versions {
-			pluginsFormatted[plugin] = append(pluginsFormatted[plugin], map[string]interface{}{
-				"version":    version,
-				"severities": severities,
-			})
+			formattedSeverities := make(map[string]interface{})
+			hasVulnerabilities := false
+
+			for severity, authMap := range severities {
+				ordered := make([]map[string]interface{}, 0)
+				for _, a := range desiredAuthOrder {
+					if vulns, ok := authMap[a]; ok && len(vulns) > 0 {
+						ordered = append(ordered, map[string]interface{}{
+							"auth_type":       cases.Title(language.Und).String(a),
+							"vulnerabilities": vulns,
+						})
+					}
+				}
+				if len(ordered) > 0 {
+					formattedSeverities[severity] = ordered
+					hasVulnerabilities = true
+				}
+			}
+
+			entry := map[string]interface{}{"version": version}
+			if hasVulnerabilities {
+				entry["severities"] = formattedSeverities
+			}
+
+			pluginsFormatted[plugin] = append(pluginsFormatted[plugin], entry)
 		}
 	}
 
-	entry := map[string]interface{}{
+	detectedPlugins := make(map[string]bool)
+	for _, entry := range results {
+		detectedPlugins[entry.Plugin] = true
+	}
+
+	for _, entry := range results {
+		if _, exists := pluginsFormatted[entry.Plugin]; !exists {
+			pluginsFormatted[entry.Plugin] = []map[string]interface{}{
+				{"version": entry.Version},
+			}
+		}
+	}
+
+	outputEntry := map[string]interface{}{
 		"url":     url,
 		"plugins": pluginsFormatted,
 	}
 
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
-	_ = encoder.Encode(entry)
+	encoder.SetIndent("", "  ")
+	_ = encoder.Encode(outputEntry)
 
 	data := buffer.Bytes()
-	data = data[:len(data)-1]
+	if len(data) > 0 {
+		data = data[:len(data)-1]
+	}
 
 	if !j.first {
 		_, _ = j.file.WriteString("\n")
@@ -150,12 +275,32 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 }
 
 func (j *JSONWriter) Close() {
+	j.mu.Lock()
+	defer j.mu.Unlock()
 	_ = j.file.Close()
+}
+
+//////////////////////////////
+// Writer Factory
+//////////////////////////////
+
+func DetectOutputFormat(outputFile string) string {
+	if outputFile == "" {
+		return "csv"
+	}
+	ext := strings.TrimPrefix(filepath.Ext(outputFile), ".")
+	supported := []string{"csv", "json"}
+	for _, format := range supported {
+		if ext == format {
+			return format
+		}
+	}
+	fmt.Printf("⚠️ Unsupported output format: %s. Defaulting to CSV.\n", ext)
+	return "csv"
 }
 
 func GetWriter(outputFile string) WriterInterface {
 	format := DetectOutputFormat(outputFile)
-
 	switch format {
 	case "json":
 		return NewJSONWriter(outputFile)
@@ -164,27 +309,9 @@ func GetWriter(outputFile string) WriterInterface {
 	}
 }
 
-func DetectOutputFormat(outputFile string) string {
-	if outputFile == "" {
-		return "csv"
-	}
-
-	ext := strings.TrimPrefix(filepath.Ext(outputFile), ".")
-	supported := []string{"csv", "json"}
-
-	for _, format := range supported {
-		if ext == format {
-			return format
-		}
-	}
-
-	fmt.Printf("⚠️ Unsupported output format: %s. Supported: csv, json. Defaulting to CSV.\n", ext)
-	return "csv"
-}
-
-func getSupportedFormats() []string {
-	return []string{"csv", "json"}
-}
+//////////////////////////////
+// Utils
+//////////////////////////////
 
 func FormatVulnerabilities(vulnMap map[string][]string) string {
 	var sections []string
@@ -197,34 +324,32 @@ func FormatVulnerabilities(vulnMap map[string][]string) string {
 func ReadLines(filename string) ([]string, error) {
 	file, err := os.Open(filename)
 	if err != nil {
-		return nil, fmt.Errorf("❌ Failed to open file: %v", err)
+		DefaultLogger.Error("Failed to open file: " + err.Error())
+		return nil, err
 	}
 	defer file.Close()
-
 	var lines []string
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
 		lines = append(lines, scanner.Text())
 	}
-
 	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("❌ Failed to read lines: %v", err)
+		DefaultLogger.Error("Failed to read lines: " + err.Error())
+		return nil, err
 	}
-
 	return lines, nil
 }
 
 func GetStoragePath(filename string) (string, error) {
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		return "", fmt.Errorf("❌ Failed to get config directory: %v", err)
+		DefaultLogger.Error("Failed to get config directory: " + err.Error())
+		return "", err
 	}
-
 	storagePath := filepath.Join(configDir, "wpprobe")
-
 	if err := os.MkdirAll(storagePath, 0755); err != nil {
-		return "", fmt.Errorf("❌ Failed to create storage directory: %v", err)
+		DefaultLogger.Error("Failed to create storage directory: " + err.Error())
+		return "", err
 	}
-
 	return filepath.Join(storagePath, filename), nil
 }
