@@ -29,6 +29,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -70,17 +71,16 @@ func authTypeOrder(auth string) int {
 type CSVWriter struct {
 	file   *os.File
 	writer *csv.Writer
+	mu     sync.Mutex
 }
 
-func NewCSVWriter(output string) *CSVWriter {
-	file, err := os.Create(output)
+func NewCSVWriter(filename string) *CSVWriter {
+	file, err := os.OpenFile(filename, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
-		DefaultLogger.Error("Failed to create CSV file: " + err.Error())
-		return nil
+		DefaultLogger.Error("Failed to open CSV file: " + err.Error())
 	}
 
 	writer := csv.NewWriter(file)
-
 	header := []string{
 		"URL",
 		"Plugin",
@@ -96,10 +96,16 @@ func NewCSVWriter(output string) *CSVWriter {
 	_ = writer.Write(header)
 	writer.Flush()
 
-	return &CSVWriter{file: file, writer: writer}
+	return &CSVWriter{
+		file:   file,
+		writer: writer,
+	}
 }
 
 func (c *CSVWriter) WriteResults(url string, results []PluginEntry) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	sort.Slice(results, func(i, j int) bool {
 		return authTypeOrder(results[i].AuthType) < authTypeOrder(results[j].AuthType)
 	})
@@ -123,10 +129,10 @@ func (c *CSVWriter) WriteResults(url string, results []PluginEntry) {
 }
 
 func (c *CSVWriter) Close() {
-	if c.file != nil {
-		c.writer.Flush()
-		_ = c.file.Close()
-	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.writer.Flush()
+	_ = c.file.Close()
 }
 
 //////////////////////////////
@@ -136,26 +142,24 @@ func (c *CSVWriter) Close() {
 type JSONWriter struct {
 	file    *os.File
 	encoder *json.Encoder
+	mu      sync.Mutex
 	first   bool
 }
 
 func NewJSONWriter(output string) *JSONWriter {
-	file, err := os.Create(output)
+	file, err := os.OpenFile(output, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		DefaultLogger.Error("Failed to create JSON file: " + err.Error())
+		DefaultLogger.Error("Failed to open JSON file: " + err.Error())
 		os.Exit(1)
 	}
 
-	writer := &JSONWriter{
-		file:    file,
-		encoder: json.NewEncoder(file),
-		first:   true,
-	}
-
-	return writer
+	return &JSONWriter{file: file, encoder: json.NewEncoder(file)}
 }
 
 func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
 	groupedResults := make(map[string]map[string]map[string]map[string][]map[string]interface{})
 
 	for _, entry := range results {
@@ -174,26 +178,30 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 		if _, ok := groupedResults[plugin][version]; !ok {
 			groupedResults[plugin][version] = make(map[string]map[string][]map[string]interface{})
 		}
-		if _, ok := groupedResults[plugin][version][severity]; !ok {
-			groupedResults[plugin][version][severity] = make(map[string][]map[string]interface{})
-		}
-
-		for i, cve := range entry.CVEs {
-			cveLink := ""
-			if i < len(entry.CVELinks) {
-				cveLink = entry.CVELinks[i]
+		if severity != "" && severity != "N/A" {
+			if _, ok := groupedResults[plugin][version][severity]; !ok {
+				groupedResults[plugin][version][severity] = make(
+					map[string][]map[string]interface{},
+				)
 			}
 
-			groupedResults[plugin][version][severity][auth] = append(
-				groupedResults[plugin][version][severity][auth],
-				map[string]interface{}{
-					"cve":         cve,
-					"cve_link":    cveLink,
-					"title":       entry.Title,
-					"cvss_score":  entry.CVSSScore,
-					"cvss_vector": entry.CVSSVector,
-				},
-			)
+			for i, cve := range entry.CVEs {
+				cveLink := ""
+				if i < len(entry.CVELinks) {
+					cveLink = entry.CVELinks[i]
+				}
+
+				groupedResults[plugin][version][severity][auth] = append(
+					groupedResults[plugin][version][severity][auth],
+					map[string]interface{}{
+						"cve":         cve,
+						"cve_link":    cveLink,
+						"title":       entry.Title,
+						"cvss_score":  entry.CVSSScore,
+						"cvss_vector": entry.CVSSVector,
+					},
+				)
+			}
 		}
 	}
 
@@ -203,6 +211,7 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 	for plugin, versions := range groupedResults {
 		for version, severities := range versions {
 			formattedSeverities := make(map[string]interface{})
+			hasVulnerabilities := false
 
 			for severity, authMap := range severities {
 				ordered := make([]map[string]interface{}, 0)
@@ -216,13 +225,16 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 				}
 				if len(ordered) > 0 {
 					formattedSeverities[severity] = ordered
+					hasVulnerabilities = true
 				}
 			}
 
-			pluginsFormatted[plugin] = append(pluginsFormatted[plugin], map[string]interface{}{
-				"version":    version,
-				"severities": formattedSeverities,
-			})
+			entry := map[string]interface{}{"version": version}
+			if hasVulnerabilities {
+				entry["severities"] = formattedSeverities
+			}
+
+			pluginsFormatted[plugin] = append(pluginsFormatted[plugin], entry)
 		}
 	}
 
@@ -234,10 +246,7 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 	for _, entry := range results {
 		if _, exists := pluginsFormatted[entry.Plugin]; !exists {
 			pluginsFormatted[entry.Plugin] = []map[string]interface{}{
-				{
-					"version":    "unknown",
-					"severities": map[string]interface{}{},
-				},
+				{"version": entry.Version},
 			}
 		}
 	}
@@ -249,6 +258,7 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 
 	var buffer bytes.Buffer
 	encoder := json.NewEncoder(&buffer)
+	encoder.SetIndent("", "  ")
 	_ = encoder.Encode(outputEntry)
 
 	data := buffer.Bytes()
@@ -265,8 +275,14 @@ func (j *JSONWriter) WriteResults(url string, results []PluginEntry) {
 }
 
 func (j *JSONWriter) Close() {
+	j.mu.Lock()
+	defer j.mu.Unlock()
 	_ = j.file.Close()
 }
+
+//////////////////////////////
+// Writer Factory
+//////////////////////////////
 
 func DetectOutputFormat(outputFile string) string {
 	if outputFile == "" {
@@ -279,7 +295,7 @@ func DetectOutputFormat(outputFile string) string {
 			return format
 		}
 	}
-	fmt.Printf("⚠️ Unsupported output format: %s. Supported: csv, json. Defaulting to CSV.\n", ext)
+	fmt.Printf("⚠️ Unsupported output format: %s. Defaulting to CSV.\n", ext)
 	return "csv"
 }
 
@@ -292,6 +308,10 @@ func GetWriter(outputFile string) WriterInterface {
 		return NewCSVWriter(outputFile)
 	}
 }
+
+//////////////////////////////
+// Utils
+//////////////////////////////
 
 func FormatVulnerabilities(vulnMap map[string][]string) string {
 	var sections []string

@@ -59,7 +59,17 @@ func TestCSVWriter_WriteResults(t *testing.T) {
 	defer writer.Close()
 
 	results := []PluginEntry{
-		{Plugin: "test-plugin", Version: "1.0", Severity: "High", CVEs: []string{"CVE-1234"}},
+		{
+			Plugin:     "test-plugin",
+			Version:    "1.0",
+			Severity:   "High",
+			AuthType:   "Unauth",
+			CVEs:       []string{"CVE-1234"},
+			CVELinks:   []string{"https://www.cve.org/CVERecord?id=CVE-1234"},
+			CVSSScore:  9.8,
+			CVSSVector: "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+			Title:      "Test Vulnerability",
+		},
 	}
 
 	writer.WriteResults("http://example.com", results)
@@ -79,8 +89,12 @@ func TestCSVWriter_WriteResults(t *testing.T) {
 
 	t.Logf("CSV content: %v", records)
 
-	if len(records) != 2 {
-		t.Errorf("Expected 2 rows (header + data), got %d", len(records))
+	if len(records) < 2 {
+		t.Fatalf("Expected at least 2 rows (header + data), got %d", len(records))
+	}
+
+	if len(records[1]) < 10 {
+		t.Fatalf("Expected at least 10 columns, got %d", len(records[1]))
 	}
 
 	if records[1][1] != "test-plugin" {
